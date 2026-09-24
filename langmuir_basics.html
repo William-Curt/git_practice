@@ -11,7 +11,7 @@
 :root {
   color-scheme: light;
   --bg: #f2f3f6; --surface: #fcfcfd; --surface-2: #f5f6f9; --surface-3: #eceef2;
-  --ink: #12151b; --ink-2: #4d5565; --muted: #838a97;
+  --ink: #12151b; --ink-2: #4d5565; --muted: #636c7f;
   --grid: #e4e6eb; --axis: #c3c8d1; --border: rgba(18,21,27,0.10); --border-strong: rgba(18,21,27,0.18);
   --accent: #2a78d6; --accent-soft: rgba(42,120,214,0.12);
   --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #4a3aa7; --ghost: #b8bdc7;
@@ -48,6 +48,7 @@
   --shadow: 0 1px 2px rgba(0,0,0,0.4), 0 10px 30px -14px rgba(0,0,0,0.7);
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html { height: 100%; }
 body { margin: 0; min-height: 100%; background: var(--bg); color: var(--ink); font-family: var(--font-ui); font-size: 15px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
 .page { max-width: 920px; margin: 0 auto; padding-inline: clamp(16px, 3vw, 28px); padding-block: 0 56px; position: relative; }
@@ -81,6 +82,7 @@ p { max-width: 68ch; }
 .seg { display: inline-flex; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); overflow: hidden; background: var(--surface); }
 .seg button { padding: 6px 12px; border: 0; background: transparent; color: var(--ink-2); font-size: 13px; font-weight: 500; border-right: 1px solid var(--border); }
 .seg button:last-child { border-right: 0; } .seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--ink); }
+.seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .picker .hint { flex-basis: 100%; margin: 0; font-size: 13px; color: var(--muted); }
 .kbd { font-family: var(--font-mono); font-size: 11px; padding: 1px 5px; border: 1px solid var(--border-strong); border-radius: 4px; background: var(--surface); }
 
@@ -429,7 +431,9 @@ figcaption { color: var(--muted); font-size: 12.5px; margin-top: 8px; }
     let ip = lo; for (let i = lo; i <= hi; i++) if (dIdV[i] > dIdV[ip]) ip = i;
     res.ip = ip; res.dIdV_max = dIdV[ip];
     const span = Is[hi] - Is[lo];
+    res.gate_reason = null;
     if (span < 10 * sigma_I || dIdV[ip] < 5 * sigma_b) {
+      res.gate_reason = span < 10 * sigma_I ? 'span' : 'slope';
       for (const f of ['no_zero_crossing', 'vf_multiple_crossings']) { const i = flags.indexOf(f); if (i >= 0) flags.splice(i, 1); }
       flags.push('no_plasma_signal'); res.Vf = null; res.dVf = null; return res;
     }
@@ -437,7 +441,14 @@ figcaption { color: var(--muted); font-size: 12.5px; margin-top: 8px; }
     const topUnreliable = p.nGlitch > 0;
     if (topUnreliable) flags.push('top_of_sweep_unreliable');
     else {
-      if (V[ip] <= Vmax - 1.0 && Is[hi] >= Is[ip] - 3 * sigma_I) { for (let j = ip + 1; j <= hi; j++) if (dIdV[j] <= 0.7 * dIdV[ip]) { Vp = V[ip]; break; } }
+      if (V[ip] <= Vmax - 1.0 && Is[hi] >= Is[ip] - 3 * sigma_I && Is[hi] - Is[ip] <= 0.4 * (Is[ip] - Is[lo]) && (Vf === null || V[ip] > Vf + 1.0)) {
+        const after = []; for (let j = ip + 1; j <= hi; j++) if (V[j] >= V[ip] + 0.3) after.push(dIdV[j]);
+        if (after.length) {
+          after.sort((a, b) => a - b);
+          const mid = after.length >> 1, med = after.length % 2 ? after[mid] : 0.5 * (after[mid - 1] + after[mid]);
+          if (med <= 0.7 * dIdV[ip]) Vp = V[ip];
+        }
+      }
       if (Vp === null) { flags.push('vp_beyond_range'); flags.push('not_saturated'); }
     }
     res.Vp = Vp;
@@ -538,7 +549,7 @@ figcaption { color: var(--muted); font-size: 12.5px; margin-top: 8px; }
     for (let k = 0; k < nSeg; k++) {
       const q = partnerOf(k, nSeg), a = results[k], b = results[q];
       if (q < k && out[k] !== null) continue;
-      if (q < k && (out[q] !== null || unresolved[q])) { out[k] = out[q]; unresolved[k] = unresolved[q]; continue; }
+      if (q < k && partnerOf(q, nSeg) === k && (out[q] !== null || unresolved[q])) { out[k] = out[q]; unresolved[k] = unresolved[q]; continue; }
       if (!pairable(a) || !pairable(b) || a.dir === b.dir) continue;
       const hv = a.dir === 'up' ? hysteresis(a, b) : hysteresis(b, a);
       out[k] = hv; out[q] = hv;
@@ -566,6 +577,11 @@ figcaption { color: var(--muted); font-size: 12.5px; margin-top: 8px; }
 (function () {
   'use strict';
   const $ = s => document.querySelector(s);
+  if (typeof d3 === 'undefined' || typeof LP === 'undefined') {
+    const c = $('#chart') || document.body, n = document.createElement('p'); n.setAttribute('role', 'alert');
+    n.textContent = 'The chart library (d3, loaded from cdnjs.cloudflare.com) did not load, so the chart and numbers are unavailable. Check your connection or ad-blocker and reload.';
+    c.prepend(n); return;
+  }
   const reduceMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
   const NG = 1457, DAC_STEP = 45;
   const FULL_URL = window.FULL_BENCH_URL || '';
@@ -792,6 +808,7 @@ figcaption { color: var(--muted); font-size: 12.5px; margin-top: 8px; }
   function setSweep(k, animate) {
     k = Math.max(0, Math.min(LAST, k | 0)); state.sweep = k; elSweep.value = String(k); elSweep.style.setProperty('--pct', (k / LAST * 100) + '%');
     const r = results[k];
+    elSweep.setAttribute('aria-valuetext', `Sweep ${k + 1} of ${NSEG}, ${r.dir === 'up' ? 'rising −10 to +10 V' : 'falling +10 to −10 V'}`);
     $('#sweep-label').textContent = `Sweep ${k + 1} of ${NSEG} · ${r.dir === 'up' ? '−10 → +10 V' : '+10 → −10 V'}`;
     $('#sweep-time').textContent = `${fmtT(r.tStart)} into the run · ${clockAt(r.tStart)} UTC`;
     show(k, animate !== false); renderNumbers(); drawMini(); persist();
@@ -806,7 +823,7 @@ figcaption { color: var(--muted); font-size: 12.5px; margin-top: 8px; }
   ys.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; state.yscale = b.dataset.v; syncY(); persist(); cur = null; layout(); setSweep(state.sweep, false); });
   syncY();
   document.addEventListener('keydown', ev => {
-    if (ev.target && /^(INPUT|SELECT|TEXTAREA|BUTTON)$/.test(ev.target.tagName) && ev.target.type !== 'range') return;
+    if (ev.target && /^(INPUT|SELECT|TEXTAREA|BUTTON)$/.test(ev.target.tagName) && ev.target !== elSweep) return;
     if (ev.key === 'ArrowRight') { ev.preventDefault(); setSweep(state.sweep + 1, true); }
     else if (ev.key === 'ArrowLeft') { ev.preventDefault(); setSweep(state.sweep - 1, true); }
     else if (ev.key === ' ' && ev.target.tagName !== 'INPUT') { ev.preventDefault(); setPlaying(!state.playing); }

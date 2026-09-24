@@ -11,7 +11,7 @@
   --surface-3: #eceef2;
   --ink: #12151b;
   --ink-2: #4d5565;
-  --muted: #838a97;
+  --muted: #636c7f;
   --grid: #e4e6eb;
   --axis: #c3c8d1;
   --border: rgba(18,21,27,0.10);
@@ -111,6 +111,7 @@ button, input, select { font: inherit; color: inherit; }
 button { cursor: pointer; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+[hidden] { display: none !important; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 /* ---------- masthead ---------- */
@@ -170,6 +171,7 @@ button { cursor: pointer; }
 .seg button:last-child { border-right: 0; }
 .seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--ink); }
 .seg button:hover:not([aria-pressed="true"]) { background: var(--surface-2); }
+.seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .strip-wrap { position: relative; height: 64px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface); overflow: hidden; }
 .strip-wrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: pointer; }
 .strip-caption { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--muted); padding: 0 2px; }
@@ -195,18 +197,18 @@ figure.card { margin: 0; padding: 14px 16px 10px; min-width: 0; }
 .fig-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 6px 16px; margin-bottom: 4px; }
 .fig-head h2 { margin: 0; font-size: 15px; font-weight: 600; }
 .fig-head .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--ink-2); }
-.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend > span { display: inline-flex; align-items: center; gap: 6px; }
 .legend i { display: inline-block; width: 16px; border-top: 2px solid var(--k); border-radius: 2px; }
 .legend i.dot { width: 7px; height: 7px; border: 0; border-radius: 50%; background: var(--k); opacity: .7; }
 .legend i.ghost { border-color: var(--ghost); }
 .chart { position: relative; width: 100%; }
 .chart svg { display: block; width: 100%; height: auto; overflow: visible; }
 .chart canvas { position: absolute; left: 0; top: 0; pointer-events: none; }
-.chart .grid-line { stroke: var(--grid); stroke-width: 1; shape-rendering: crispEdges; }
-.chart .axis-line { stroke: var(--axis); stroke-width: 1; shape-rendering: crispEdges; }
-.chart .zero-line { stroke: var(--axis); stroke-width: 1; shape-rendering: crispEdges; }
-.chart .tick-text { fill: var(--muted); font-family: var(--font-mono); font-size: 10.5px; font-variant-numeric: tabular-nums; }
-.chart .axis-title { fill: var(--ink-2); font-size: 11.5px; font-weight: 500; }
+.chart .grid-line, .mini .grid-line { stroke: var(--grid); stroke-width: 1; shape-rendering: crispEdges; }
+.chart .axis-line, .mini .axis-line { stroke: var(--axis); stroke-width: 1; shape-rendering: crispEdges; }
+.chart .zero-line, .mini .zero-line { stroke: var(--axis); stroke-width: 1; shape-rendering: crispEdges; }
+.chart .tick-text, .mini .tick-text { fill: var(--muted); font-family: var(--font-mono); font-size: 10.5px; font-variant-numeric: tabular-nums; }
+.chart .axis-title, .mini .axis-title { fill: var(--ink-2); font-size: 11.5px; font-weight: 500; }
 .chart .line-main { fill: none; stroke: var(--s1); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
 .chart .line-pair { fill: none; stroke: var(--s2); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
 .chart .line-ion { fill: none; stroke: var(--s3); stroke-width: 1.5; }
@@ -277,6 +279,7 @@ figcaption { color: var(--muted); font-size: 12px; margin-top: 6px; }
 .trends .head p { margin: 0; color: var(--muted); font-size: 12px; }
 .multiples { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .mini { padding: 10px 12px 6px; min-width: 0; }
+.mini svg { display: block; width: 100%; height: auto; overflow: visible; }
 .mini .t { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 12px; color: var(--ink-2); margin-bottom: 2px; }
 .mini .t .cur { white-space: nowrap; }
 .mini .t b { color: var(--ink); font-weight: 600; }
@@ -285,7 +288,7 @@ figcaption { color: var(--muted); font-size: 12px; margin-top: 6px; }
 .mini .area { fill: var(--s1); opacity: 0.08; }
 .mini .pt { fill: var(--s1); stroke: var(--surface); stroke-width: 1.5; }
 .mini .pt.dn { fill: var(--surface); stroke: var(--s1); }
-.mini .pt.cur { r: 5; stroke: var(--surface); stroke-width: 2; }
+.mini .pt.cur { r: 5; stroke-width: 2; }
 .mini .cursor { stroke: var(--ink-2); stroke-width: 1; }
 .mini .hit { fill: transparent; cursor: pointer; }
 
@@ -365,23 +368,23 @@ tr.cur:hover td { background: var(--accent-soft); }
       </div>
     </div>
     <div class="strip-wrap" title="Whole log: current vs time. Click to jump to a sweep.">
-      <canvas id="strip" aria-label="Current over the whole log; click to jump to a sweep" role="img"></canvas>
+      <canvas id="strip" aria-label="Current over the whole log" role="img"></canvas>
     </div>
     <div class="strip-caption"><span id="strip-left">whole log · I vs time</span><span id="strip-right" class="mono"></span></div>
   </section>
 
   <div class="filters" role="group" aria-label="Plot options">
     <div class="ctl"><span class="lab">Channel</span>
-      <div class="seg" id="channel"><button type="button" data-v="I2" aria-pressed="true">I2</button><button type="button" data-v="I1">I1</button></div>
+      <div class="seg" id="channel" role="group" aria-label="Channel"><button type="button" data-v="I2" aria-pressed="true">I2</button><button type="button" data-v="I1">I1</button></div>
     </div>
     <div class="ctl"><span class="lab">Overlay</span>
-      <div class="seg" id="overlay"><button type="button" data-v="single" aria-pressed="true">This sweep</button><button type="button" data-v="pair">Up + down</button><button type="button" data-v="all">All sweeps</button></div>
+      <div class="seg" id="overlay" role="group" aria-label="Overlay"><button type="button" data-v="single" aria-pressed="true">This sweep</button><button type="button" data-v="pair">Up + down</button><button type="button" data-v="all">All sweeps</button></div>
     </div>
     <div class="ctl"><span class="lab">Y</span>
-      <div class="seg" id="yscale"><button type="button" data-v="lin" aria-pressed="true">Linear</button><button type="button" data-v="log">Log |I|</button></div>
+      <div class="seg" id="yscale" role="group" aria-label="Y scale"><button type="button" data-v="lin" aria-pressed="true">Linear</button><button type="button" data-v="log">Log |I|</button></div>
     </div>
     <div class="ctl"><span class="lab">Quantity</span>
-      <div class="seg" id="quantity"><button type="button" data-v="I" aria-pressed="true">Measured I</button><button type="button" data-v="Ie">Electron Ie = I − I<sub>ion</sub></button></div>
+      <div class="seg" id="quantity" role="group" aria-label="Quantity"><button type="button" data-v="I" aria-pressed="true">Measured I</button><button type="button" data-v="Ie">Electron Ie = I − I<sub>ion</sub></button></div>
     </div>
     <div class="ctl"><span class="lab">Layers</span>
       <div class="checks">
@@ -390,12 +393,12 @@ tr.cur:hover td { background: var(--accent-soft); }
         <label><input type="checkbox" id="ly-fits" checked><i class="key" style="--k:var(--s3)"></i> Fits &amp; markers</label>
         <label><input type="checkbox" id="ly-deriv" checked><i class="key" style="--k:var(--s2)"></i> Lower panel</label>
       </div>
-      <div class="seg" id="lower"><button type="button" data-v="deriv" aria-pressed="true">dI/dV</button><button type="button" data-v="telocal">Local T<sub>e</sub>(V)</button></div>
+      <div class="seg" id="lower" role="group" aria-label="Lower panel"><button type="button" data-v="deriv" aria-pressed="true">dI/dV</button><button type="button" data-v="telocal">Local T<sub>e</sub>(V)</button></div>
     </div>
     <div class="ctl"><span class="lab">Baseline</span>
-      <div class="seg" id="baseline"><button type="button" data-v="ref" aria-pressed="true">Plasma-off fit</button><button type="button" data-v="const">Constant</button><button type="button" data-v="none">None</button></div>
+      <div class="seg" id="baseline" role="group" aria-label="Baseline"><button type="button" data-v="ref" aria-pressed="true">Plasma-off fit</button><button type="button" data-v="const">Constant</button><button type="button" data-v="none">None</button></div>
       <span class="ctl" id="base-ref-wrap"><span class="lab">sweeps</span><input class="num" type="number" id="base-from" min="1" max="81" step="1" value="75" aria-label="First plasma-off reference sweep" style="width:64px"><span class="lab">to</span><input class="num" type="number" id="base-to" min="1" max="81" step="1" value="80" aria-label="Last plasma-off reference sweep" style="width:64px"><span class="lab mono" id="base-fit" style="text-transform:none;letter-spacing:0"></span></span>
-      <span class="ctl" id="base-const-wrap" hidden><input class="num" type="number" id="base-const" step="1" value="148" aria-label="Constant offset in nanoamps"><span class="lab">nA</span></span>
+      <span class="ctl" id="base-const-wrap" hidden><input class="num" type="number" id="base-const" step="1" value="157" aria-label="Constant offset in nanoamps"><span class="lab">nA</span></span>
     </div>
   </div>
 
@@ -404,13 +407,13 @@ tr.cur:hover td { background: var(--accent-soft); }
       <div class="fig-head">
         <h2 id="iv-title">I–V characteristic</h2>
         <div class="legend" id="iv-legend">
-          <span><i class="dot" style="--k:var(--s1)"></i>samples</span>
-          <span><i style="--k:var(--s1)"></i>smoothed</span>
-          <span id="lg-pair" hidden><i style="--k:var(--s2)"></i>partner sweep</span>
-          <span id="lg-ghost" hidden><i class="ghost"></i>other sweeps</span>
-          <span id="lg-excl" hidden><i class="dot ghost" style="--k:var(--ghost)"></i>excluded (overrange)</span>
-          <span><i style="--k:var(--s3)"></i>ion-saturation fit</span>
-          <span><i style="--k:var(--s4)"></i>exp(V/T<sub>e</sub>) fit</span>
+          <span id="lg-points"><i class="dot" style="--k:var(--s1)"></i><span>samples</span></span>
+          <span id="lg-smooth"><i style="--k:var(--s1)"></i><span>smoothed</span></span>
+          <span id="lg-pair" hidden><i style="--k:var(--s2)"></i><span>partner sweep</span></span>
+          <span id="lg-ghost" hidden><i class="ghost"></i><span>other sweeps</span></span>
+          <span id="lg-excl" hidden><i class="dot ghost" style="--k:var(--ghost)"></i><span>excluded (over-range)</span></span>
+          <span id="lg-ion"><i style="--k:var(--s3)"></i><span>ion-saturation fit</span></span>
+          <span id="lg-te"><i style="--k:var(--s4)"></i><span>exp(V/T<sub>e</sub>) fit</span></span>
         </div>
       </div>
       <div class="chart" id="iv-chart">
@@ -432,7 +435,7 @@ tr.cur:hover td { background: var(--accent-soft); }
         <h2 id="pr-title">Fit parameters</h2>
         <div class="param">
           <span class="l">Smoothing window</span><span class="v" id="v-window">31 pts</span>
-          <input class="range small" type="range" id="p-window" min="5" max="121" step="2" value="31" aria-label="Smoothing window in points">
+          <input class="range small" type="range" id="p-window" min="17" max="121" step="2" value="31" aria-label="Smoothing window in points">
         </div>
         <div class="param">
           <span class="l">Ion-saturation region (from V<sub>min</sub>)</span><span class="v" id="v-fion">20 %</span>
@@ -440,7 +443,7 @@ tr.cur:hover td { background: var(--accent-soft); }
         </div>
         <div class="param">
           <span class="l">T<sub>e</sub> fit window</span>
-          <div class="seg" id="tewin"><button type="button" data-v="auto" aria-pressed="true">Auto</button><button type="button" data-v="manual">Manual</button></div>
+          <div class="seg" id="tewin" role="group" aria-label="Te fit window"><button type="button" data-v="auto" aria-pressed="true">Auto</button><button type="button" data-v="manual">Manual</button></div>
           <div class="row2" id="tewin-auto">
             <span class="l" style="flex:1">I<sub>e</sub> between</span><span class="v" id="v-telo">2 %</span>
             <input class="range small" type="range" id="p-telo" min="0.01" max="0.5" step="0.01" value="0.02" aria-label="Lower electron-current fraction of the Te window" style="width:100%">
@@ -460,7 +463,7 @@ tr.cur:hover td { background: var(--accent-soft); }
       <section class="card panel" aria-labelledby="pb-title">
         <h2 id="pb-title">Probe &amp; gas <span class="sub">for densities</span></h2>
         <div class="probe">
-          <label>Probe area (mm²)<input class="num" type="number" id="p-area" min="0.001" step="0.1" value="10"></label>
+          <label>Probe area (mm²)<input class="num" type="number" id="p-area" min="0.001" step="any" value="10"></label>
           <label>Working gas
             <select class="sel" id="p-gas">
               <option value="39.948" selected>Argon (39.95 u)</option>
@@ -474,7 +477,7 @@ tr.cur:hover td { background: var(--accent-soft); }
               <option value="custom">Custom…</option>
             </select>
           </label>
-          <label id="p-mass-wrap" hidden>Ion mass (u)<input class="num" type="number" id="p-mass" min="0.5" step="0.01" value="39.948"></label>
+          <label id="p-mass-wrap" hidden>Ion mass (u)<input class="num" type="number" id="p-mass" min="0.5" step="any" value="39.948"></label>
         </div>
         <p class="hint">Densities use the electron thermal flux (n<sub>e</sub>) and the Bohm ion flux with the 0.61 presheath factor (n<sub>i</sub>). Set the real collecting area of your tip.</p>
       </section>
@@ -500,29 +503,30 @@ tr.cur:hover td { background: var(--accent-soft); }
   <section class="method" aria-labelledby="me-title">
     <h2 id="me-title">About this dataset</h2>
     <div class="verdict" id="verdict">
-      <p><b>What the log shows.</b> A ±10 V triangle sweep (1.12 V/s, 17.9 s per half-sweep) on a small probe in a tenuous plasma whose density stepped through several levels over 24 minutes. The current channel carries an instrument offset of about 148 nA plus a ≈1.7 nA/V leakage ramp (≈600 MΩ); both are visible directly in the last seven sweeps (75–81), where the plasma is off, and they are removed by the default “plasma-off fit” baseline.</p>
-      <p><b>What that means for the numbers.</b> After the baseline, plasma sweeps show a floating potential of −2.5 to −4.8 V, an ion current of only 10–75 nA at −9.5 V that is still growing with |V| (no flat ion saturation), and an electron current that keeps rising all the way to +10 V. No sweep reaches a knee, so the plasma potential lies above +10 V (sheath theory puts it near 11–13 V) and electron saturation is never seen: n<sub>e</sub> is a lower bound and T<sub>e</sub> is an effective slope temperature over the fit window. The electron branch is not a single exponential: the local slope temperature rises from about 1 eV just above V<sub>f</sub> to about 6 eV near +8 V (switch the lower panel to “Local T<sub>e</sub>(V)” to see it). Up- and down-sweeps are offset by 0.4–1 V of hysteresis. Two episodes (sweeps 9–10 and 59–60) are over-range transients where the ADC wrapped from +2.9 µA to −2.1 µA; those samples are excluded from every fit and drawn in grey. With Debye lengths of several millimetres the probe is in the orbital-motion-limited regime, so the planar saturation-current formulas are approximations.</p>
+      <p><b>What the log shows.</b> A ±10 V triangle sweep (1.12 V/s, 17.9 s per half-sweep) on a small probe in a tenuous plasma whose density stepped through several levels over 24 minutes. The current channel carries an instrument offset of about 157 nA plus a ≈1.7 nA/V leakage ramp (≈600 MΩ); both are visible directly in the last seven sweeps (75–81), where the plasma is off, and they are removed by the default “plasma-off fit” baseline.</p>
+      <p><b>What that means for the numbers</b> (default settings). Floating potential: −3 to −5 V in the denser phases (sweeps 2–10 and 48–73) and −2 to +3 V in the low-density phase (11–47), with down-sweeps sitting 0.4–1.4 V above their up-sweeps (the hysteresis; sweeps 28–29 are anomalous and flagged). The ion current averaged over −10 … −9 V is only 6–110 nA and is still growing with |V|, so there is no flat ion saturation. The electron current keeps rising to +10 V in every sweep but one: a knee is accepted only in sweep 47, at the moment the density jumped, so V<sub>p</sub> lies beyond +10 V and electron saturation is not reached. n<sub>e</sub> (1.5×10¹¹ – 5×10¹² m⁻³ for a 10 mm² tip) is therefore a lower bound, and T<sub>e</sub> (1.5–2.7 eV, median 2.2) is an effective slope temperature over the fit window: the local slope temperature rises from about 1 eV just above V<sub>f</sub> to about 6 eV near +8 V (switch the lower panel to “Local T<sub>e</sub>(V)”), so the sheath-theory estimate V<sub>f</sub> + 5.2 T<sub>e</sub> scatters from 4 to 17 V (median 8.6 V) and should not be read as a measurement. Two episodes (sweeps 9–10 and 59–60) are over-range transients where the ADC wrapped from +2.9 µA to −2.1 µA; those samples are excluded from every fit and drawn in grey. With Debye lengths of 5–28 mm the probe is in the orbital-motion-limited regime, so the planar saturation-current formulas are approximations.</p>
     </div>
     <h2>How each number is computed</h2>
     <div class="cols">
       <div>
         <ol>
-          <li><b>Half-sweeps</b> are cut wherever the DAC ramp reverses direction (0 ↔ 65535); each is 1457 samples, 17.9 s.</li>
+          <li><b>Half-sweeps</b> are cut wherever the DAC ramp reverses direction (0 ↔ 65535); a full one is 1457 samples, 17.9 s (the first and last are truncated).</li>
           <li><b>Over-range screening</b> drops samples where I2 is below −50 nA or jumps by more than 1 µA between neighbours (the ADC wrap-around), before anything else.</li>
           <li><b>Baseline</b>: a straight line fitted to the plasma-off sweeps (default 75–80) is subtracted; a constant or no baseline are also available.</li>
           <li><b>Smoothing</b> is a centred moving average over the chosen window; <b>dI/dV</b> is the least-squares slope over the same window. The residual scatter gives the noise σ<sub>I</sub>.</li>
           <li><b>Signal gate</b>: a sweep needs a current span above 10 σ<sub>I</sub> and a slope above 5 σ<sub>b</sub> to be analysed; otherwise it is reported as “no plasma signal”. Partial sweeps (not reaching ±8 V) are shown but not analysed.</li>
-          <li><b>Ion-saturation fit</b>: a straight line through the most negative part of the sweep (the chosen fraction). Its extrapolation I<sub>ion</sub>(V) is subtracted to give the electron current I<sub>e</sub>. <b>I<sub>is</sub></b> is the mean current over the lowest 1 V; the fit extrapolated to V<sub>f</sub> is shown as a secondary value.</li>
+          <li><b>Ion-saturation fit</b>: a straight line through the most negative part of the sweep (the chosen fraction). Its extrapolation I<sub>ion</sub>(V) is subtracted to give the electron current I<sub>e</sub>. The <b>ion current</b> quoted is the mean over −10 … −9 V (the ion branch is still growing there, so it is not a flat saturation value); the fit extrapolated to V<sub>f</sub> is shown as a secondary value.</li>
         </ol>
       </div>
       <div>
         <ol start="7">
           <li><b>V<sub>f</sub></b> (floating potential): where the smoothed current crosses zero, with an uncertainty σ<sub>I</sub>/(dI/dV). Multiple crossings are resolved by a local line fit and flagged.</li>
-          <li><b>V<sub>p</sub></b> (plasma potential): the maximum of dI/dV, accepted only when it lies at least 1 V inside the sweep and the slope falls to 70 % of the peak beyond it. Otherwise the knee is beyond +10 V and the sheath estimate V<sub>f</sub> + T<sub>e</sub> ln(√(m<sub>i</sub>/2πm<sub>e</sub>)/0.61) is shown instead.</li>
+          <li><b>V<sub>p</sub></b> (plasma potential): the maximum of dI/dV, accepted only when it lies at least 1 V inside the sweep and above V<sub>f</sub> + 1 V, the slope beyond it (median) falls to 70 % of the peak, and the current then stays within −3 σ<sub>I</sub> … +40 % of its value at the knee. Otherwise the knee is beyond +10 V. The sheath-theory estimate V<sub>f</sub> + T<sub>e</sub> ln(√(m<sub>i</sub>/2πm<sub>e</sub>)/0.61) (≈ V<sub>f</sub> + 5.2 T<sub>e</sub> for argon) is shown for orientation; because it uses the slope T<sub>e</sub> near V<sub>f</sub>, it comes out low when the electron branch is non-exponential.</li>
           <li><b>T<sub>e</sub></b>: slope of ln I<sub>e</sub> vs V over the transition window, T<sub>e</sub> = 1/slope in eV, with R². The window's lower and upper halves are fitted separately; a ratio above 1.3 flags a non-exponential branch.</li>
           <li><b>I<sub>es</sub></b>: electron current at V<sub>p</sub>, or the peak electron current of the sweep (normally at +10 V) as a lower bound when no knee is found.</li>
           <li><b>n<sub>e</sub></b> = I<sub>es</sub> / (e A √(eT<sub>e</sub>/2πm<sub>e</sub>)); <b>n<sub>i</sub></b> = |I<sub>is</sub>| / (0.61 e A √(eT<sub>e</sub>/m<sub>i</sub>)); <b>λ<sub>D</sub></b> = √(ε₀T<sub>e</sub>/n<sub>e</sub>e). Both densities scale as 1/A, so set the real collecting area.</li>
           <li><b>Hysteresis</b>: each up-sweep is paired with the down-sweep that follows it; the value is the bias shift that best aligns the down-sweep onto the up-sweep over −5 … +9 V (positive: the down-sweep reaches each current at a higher bias).</li>
+          <li><b>Local T<sub>e</sub>(V)</b> = I<sub>e</sub> / (dI<sub>e</sub>/dV), from the smoothed electron current and the windowed slope with the ion-fit slope removed; shown only where I<sub>e</sub> &gt; 3 σ<sub>I</sub> and the slope is positive. It equals T<sub>e</sub> only where the branch is exponential; the panel is capped at 12 eV.</li>
         </ol>
       </div>
     </div>

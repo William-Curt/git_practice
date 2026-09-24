@@ -201,7 +201,9 @@
     let ip = lo; for (let i = lo; i <= hi; i++) if (dIdV[i] > dIdV[ip]) ip = i;
     res.ip = ip; res.dIdV_max = dIdV[ip];
     const span = Is[hi] - Is[lo];
+    res.gate_reason = null;
     if (span < 10 * sigma_I || dIdV[ip] < 5 * sigma_b) {
+      res.gate_reason = span < 10 * sigma_I ? 'span' : 'slope';
       for (const f of ['no_zero_crossing', 'vf_multiple_crossings']) { const i = flags.indexOf(f); if (i >= 0) flags.splice(i, 1); }
       flags.push('no_plasma_signal'); res.Vf = null; res.dVf = null; return res;
     }
@@ -209,7 +211,14 @@
     const topUnreliable = p.nGlitch > 0;
     if (topUnreliable) flags.push('top_of_sweep_unreliable');
     else {
-      if (V[ip] <= Vmax - 1.0 && Is[hi] >= Is[ip] - 3 * sigma_I) { for (let j = ip + 1; j <= hi; j++) if (dIdV[j] <= 0.7 * dIdV[ip]) { Vp = V[ip]; break; } }
+      if (V[ip] <= Vmax - 1.0 && Is[hi] >= Is[ip] - 3 * sigma_I && Is[hi] - Is[ip] <= 0.4 * (Is[ip] - Is[lo]) && (Vf === null || V[ip] > Vf + 1.0)) {
+        const after = []; for (let j = ip + 1; j <= hi; j++) if (V[j] >= V[ip] + 0.3) after.push(dIdV[j]);
+        if (after.length) {
+          after.sort((a, b) => a - b);
+          const mid = after.length >> 1, med = after.length % 2 ? after[mid] : 0.5 * (after[mid - 1] + after[mid]);
+          if (med <= 0.7 * dIdV[ip]) Vp = V[ip];
+        }
+      }
       if (Vp === null) { flags.push('vp_beyond_range'); flags.push('not_saturated'); }
     }
     res.Vp = Vp;
@@ -310,7 +319,7 @@
     for (let k = 0; k < nSeg; k++) {
       const q = partnerOf(k, nSeg), a = results[k], b = results[q];
       if (q < k && out[k] !== null) continue;
-      if (q < k && (out[q] !== null || unresolved[q])) { out[k] = out[q]; unresolved[k] = unresolved[q]; continue; }
+      if (q < k && partnerOf(q, nSeg) === k && (out[q] !== null || unresolved[q])) { out[k] = out[q]; unresolved[k] = unresolved[q]; continue; }
       if (!pairable(a) || !pairable(b) || a.dir === b.dir) continue;
       const hv = a.dir === 'up' ? hysteresis(a, b) : hysteresis(b, a);
       out[k] = hv; out[q] = hv;

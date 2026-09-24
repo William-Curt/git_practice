@@ -2,6 +2,11 @@
 (function () {
   'use strict';
   const $ = s => document.querySelector(s);
+  if (typeof d3 === 'undefined' || typeof LP === 'undefined') {
+    const c = $('#chart') || document.body, n = document.createElement('p'); n.setAttribute('role', 'alert');
+    n.textContent = 'The chart library (d3, loaded from cdnjs.cloudflare.com) did not load, so the chart and numbers are unavailable. Check your connection or ad-blocker and reload.';
+    c.prepend(n); return;
+  }
   const reduceMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
   const NG = 1457, DAC_STEP = 45;
   const FULL_URL = window.FULL_BENCH_URL || '';
@@ -228,6 +233,7 @@
   function setSweep(k, animate) {
     k = Math.max(0, Math.min(LAST, k | 0)); state.sweep = k; elSweep.value = String(k); elSweep.style.setProperty('--pct', (k / LAST * 100) + '%');
     const r = results[k];
+    elSweep.setAttribute('aria-valuetext', `Sweep ${k + 1} of ${NSEG}, ${r.dir === 'up' ? 'rising −10 to +10 V' : 'falling +10 to −10 V'}`);
     $('#sweep-label').textContent = `Sweep ${k + 1} of ${NSEG} · ${r.dir === 'up' ? '−10 → +10 V' : '+10 → −10 V'}`;
     $('#sweep-time').textContent = `${fmtT(r.tStart)} into the run · ${clockAt(r.tStart)} UTC`;
     show(k, animate !== false); renderNumbers(); drawMini(); persist();
@@ -242,7 +248,7 @@
   ys.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; state.yscale = b.dataset.v; syncY(); persist(); cur = null; layout(); setSweep(state.sweep, false); });
   syncY();
   document.addEventListener('keydown', ev => {
-    if (ev.target && /^(INPUT|SELECT|TEXTAREA|BUTTON)$/.test(ev.target.tagName) && ev.target.type !== 'range') return;
+    if (ev.target && /^(INPUT|SELECT|TEXTAREA|BUTTON)$/.test(ev.target.tagName) && ev.target !== elSweep) return;
     if (ev.key === 'ArrowRight') { ev.preventDefault(); setSweep(state.sweep + 1, true); }
     else if (ev.key === 'ArrowLeft') { ev.preventDefault(); setSweep(state.sweep - 1, true); }
     else if (ev.key === ' ' && ev.target.tagName !== 'INPUT') { ev.preventDefault(); setPlaying(!state.playing); }

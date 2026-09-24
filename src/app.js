@@ -3,6 +3,11 @@
   'use strict';
   const $ = (s, el) => (el || document).querySelector(s);
   const $$ = (s, el) => Array.from((el || document).querySelectorAll(s));
+  if (typeof d3 === 'undefined' || typeof LP === 'undefined') {
+    const c = $('#iv-chart') || document.body, n = document.createElement('p'); n.setAttribute('role', 'alert');
+    n.textContent = 'The chart library (d3, loaded from cdnjs.cloudflare.com) did not load, so charts and analysis are unavailable. Check your connection or ad-blocker and reload.';
+    c.prepend(n); return;
+  }
   const reduceMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
   const NG = 1457, DAC_STEP = 45;
 
@@ -37,19 +42,30 @@
     sweep: 1, playing: false, speed: 1, loop: true,
     channel: 'I2', overlay: 'single', yscale: 'lin', quantity: 'I', lower: 'deriv',
     layers: { points: true, smooth: true, fits: true, deriv: true },
-    baseline: { mode: 'ref', refFrom: Math.max(0, NSEG - 7), refTo: Math.max(0, NSEG - 2), value: 1.48e-7 },
+    baseline: { mode: 'ref', refFrom: Math.max(0, NSEG - 7), refTo: Math.max(0, NSEG - 2), value: 1.57e-7 },
     params: { fIon: 0.2, window: 31, teMode: 'auto', teLo: 0.02, teHi: 0.30, teVlo: -4, teVhi: 2, area: 1.0e-5, mass: 39.948 },
     tableOpen: false,
   };
   try {
     const saved = JSON.parse(localStorage.getItem('lsb-state-v2') || 'null');
-    if (saved && typeof saved === 'object') {
-      for (const k of ['sweep', 'speed', 'loop', 'channel', 'overlay', 'yscale', 'quantity', 'lower', 'tableOpen']) if (k in saved) state[k] = saved[k];
-      if (saved.layers) Object.assign(state.layers, saved.layers);
-      if (saved.baseline) Object.assign(state.baseline, saved.baseline);
-      if (saved.params) Object.assign(state.params, saved.params);
+    const OK = { channel: ['I1', 'I2'], overlay: ['single', 'pair', 'all'], yscale: ['lin', 'log'], quantity: ['I', 'Ie'], lower: ['deriv', 'telocal'], speed: [0.5, 1, 2, 4], loop: [true, false], tableOpen: [true, false] };
+    const isObj = o => o && typeof o === 'object' && !Array.isArray(o);
+    const num = (v, lo, hi, d) => (typeof v === 'number' && Number.isFinite(v) && v >= lo && v <= hi) ? v : d;
+    if (isObj(saved)) {
+      for (const k of ['sweep', 'speed', 'loop', 'channel', 'overlay', 'yscale', 'quantity', 'lower', 'tableOpen']) if (k in saved && (!OK[k] || OK[k].includes(saved[k]))) state[k] = saved[k];
+      if (isObj(saved.layers)) for (const k of Object.keys(state.layers)) if (typeof saved.layers[k] === 'boolean') state.layers[k] = saved.layers[k];
+      if (isObj(saved.baseline)) {
+        if (['ref', 'const', 'none'].includes(saved.baseline.mode)) state.baseline.mode = saved.baseline.mode;
+        state.baseline.refFrom = num(saved.baseline.refFrom, 0, LAST, state.baseline.refFrom) | 0; state.baseline.refTo = num(saved.baseline.refTo, 0, LAST, state.baseline.refTo) | 0;
+        state.baseline.value = num(saved.baseline.value, -1e-3, 1e-3, state.baseline.value);
+      }
+      if (isObj(saved.params)) {
+        const P = state.params, q = saved.params;
+        P.fIon = num(q.fIon, 0.05, 0.5, P.fIon); P.window = num(q.window, 17, 121, P.window) | 1; P.teLo = num(q.teLo, 0.01, 0.5, P.teLo); P.teHi = num(q.teHi, 0.05, 1, P.teHi);
+        P.teVlo = num(q.teVlo, -10, 10, P.teVlo); P.teVhi = num(q.teVhi, -10, 10, P.teVhi); P.area = num(q.area, 1e-9, 1, P.area); P.mass = num(q.mass, 0.5, 1000, P.mass);
+        if (['auto', 'manual'].includes(q.teMode)) P.teMode = q.teMode;
+      }
       state.sweep = Math.min(LAST, Math.max(0, state.sweep | 0));
-      state.baseline.refFrom = Math.min(LAST, Math.max(0, state.baseline.refFrom | 0)); state.baseline.refTo = Math.min(LAST, Math.max(0, state.baseline.refTo | 0));
     }
   } catch (e) { /* storage unavailable: defaults */ }
   function persist() {
@@ -104,6 +120,7 @@
     return { v: (v < 0 ? '−' : '') + Math.abs(v).toFixed(d), u: u.u };
   }
   const fmtAstr = (a, d) => { const f = fmtA(a, d); return f ? f.v + ' ' + f.u : '—'; };
+  const fmtAin = (a, u, d) => (a < 0 ? '−' : '') + (Math.abs(a) * u.s).toFixed(d) + ' ' + u.u;
   const fmtV = (v, d) => (v === null || v === undefined || !Number.isFinite(v)) ? '—' : (v < 0 ? '−' : '') + Math.abs(v).toFixed(d === undefined ? 2 : d) + ' V';
   function fmtSci(n) {
     if (n === null || n === undefined || !Number.isFinite(n) || n <= 0) return '—';
@@ -129,11 +146,11 @@
     no_zero_crossing: ['Current never crosses zero: V_f outside the sweep (or baseline needed)', 'warn'],
     vf_multiple_crossings: ['Several zero crossings: V_f from a local line fit', 'warn'],
     vp_beyond_range: ['No knee inside the sweep: V_p is beyond +10 V', 'warn'],
-    not_saturated: ['Electron current not saturated: I_es and n_e are lower bounds (at +10 V)', 'warn'],
+    not_saturated: ['Electron current not saturated: I_es and n_e are lower bounds (near +10 V)', 'warn'],
     te_insufficient: ['Too few points in the T_e window', 'crit'],
     te_negative_slope: ['ln I_e slope ≤ 0: no exponential transition found', 'crit'],
     te_poor_fit: ['T_e fit R² below 0.9', 'warn'],
-    te_nonexponential: ['Electron branch is not a single exponential: slope T_e differs by >30 % between the window halves', 'info'],
+    te_nonexponential: ['Electron branch is not a single exponential: the upper half of the T_e window is >30 % hotter than the lower half', 'info'],
     iis_below_noise: ['Ion current below 3 σ noise: n_i not computed', 'warn'],
     ion_current_positive: ['Ion-side current is positive: offset not removed or no ion current', 'warn'],
     ion_fit_insufficient: ['Too few points for the ion-saturation fit', 'crit'],
@@ -219,11 +236,11 @@
   let ghostCanvas = null, ghostKey = '';
 
   function layout() {
-    const w = Math.max(320, el.ivChart.clientWidth || 640);
+    const w = Math.max(200, el.ivChart.clientWidth || 640);
     iv.w = w;
     iv.mainH = w < 520 ? 260 : 340;
     iv.derivH = w < 520 ? 100 : 120;
-    iv.m.l = w < 520 ? 52 : 64;
+    iv.m.l = (w < 520 ? 56 : 64) + (state.yscale === 'log' ? 14 : 0);
     const showD = state.layers.deriv;
     iv.h = iv.m.t + iv.mainH + (showD ? iv.gap + iv.derivH : 0) + iv.m.b;
     svg.attr('viewBox', `0 0 ${w} ${iv.h}`).attr('width', w).attr('height', iv.h);
@@ -299,7 +316,8 @@
       const frame = { k: to.k, V: lerpArr(from.V, to.V, e), S: lerpArr(from.S, to.S, e), R: t < 1 ? lerpArr(from.R, to.R, e) : to.R, L: lerpArr(from.L, to.L, e), dom,
         ddom: [from.ddom[0] + (to.ddom[0] - from.ddom[0]) * e, from.ddom[1] + (to.ddom[1] - from.ddom[1]) * e] };
       drawIV(frame, to.k, t < 1);
-      if (t < 1) iv.tween.raf = requestAnimationFrame(step); else { iv.cur = to; iv.tween = null; }
+      iv.cur = t < 1 ? frame : to;
+      if (t < 1) iv.tween.raf = requestAnimationFrame(step); else iv.tween = null;
     };
     iv.tween = { raf: requestAnimationFrame(step) };
   }
@@ -364,11 +382,14 @@
         const vs = d3.range(lo, hi + 0.001, (hi - lo) / 80);
         pathTe.attr('d', line(vs.map(v => { const ie = Math.exp(r.te_alpha + r.te_beta * v); return [v, yv(state.quantity === 'I' ? ie + r.a_i + r.b_i * v : ie)]; })));
       } else pathTe.attr('d', null);
-      if (r.Te !== null) readout.push({ t: `Te = ${r.Te.toFixed(2)} eV  R² ${Number.isFinite(r.Te_r2) ? r.Te_r2.toFixed(3) : '—'}  window ${fmtV(tw[0], 1)} → ${fmtV(tw[1], 1)}`, strong: true });
-      if (r.Te_lo !== null && r.Te_hi !== null) readout.push({ t: `lower / upper half of window: ${r.Te_lo.toFixed(2)} / ${r.Te_hi.toFixed(2)} eV` });
-      if (Number.isFinite(r.a_i)) readout.push({ t: `ion fit  I = ${fmtAstr(r.a_i)} ${r.b_i < 0 ? '−' : '+'} ${fmtAstr(Math.abs(r.b_i))}/V · V` });
-      if (r.Vp === null) readout.push({ t: `Vp beyond +10 V` + (r.Vp_expected !== null ? `  (sheath estimate ${fmtV(r.Vp_expected, 1)})` : '') });
-      if (r.hysteresis !== null) readout.push({ t: `up/down hysteresis ${r.hysteresis >= 0 ? '+' : '−'}${Math.abs(r.hysteresis).toFixed(2)} V` });
+      const narrow = w < 520, lost = r.flags.includes('top_of_sweep_unreliable'), ionBad = r.flags.includes('ion_current_positive');
+      if (r.Te !== null) readout.push({ t: narrow ? `Te ${r.Te.toFixed(2)} eV · R² ${Number.isFinite(r.Te_r2) ? r.Te_r2.toFixed(2) : '—'}` : `Te = ${r.Te.toFixed(2)} eV  R² ${Number.isFinite(r.Te_r2) ? r.Te_r2.toFixed(3) : '—'}  window ${fmtV(tw[0], 1)} → ${fmtV(tw[1], 1)}`, strong: true });
+      if (!narrow) {
+        if (r.Te_lo !== null && r.Te_hi !== null) readout.push({ t: `lower / upper half of window: ${r.Te_lo.toFixed(2)} / ${r.Te_hi.toFixed(2)} eV` });
+        if (Number.isFinite(r.a_i)) { const u = unitFor(Math.abs(r.b_i)); readout.push({ t: `ion fit  I = ${fmtAin(r.a_i, u, 2)} ${r.b_i < 0 ? '−' : '+'} ${fmtAin(Math.abs(r.b_i), u, 2)}/V · V` }); }
+        if (r.Vp === null) readout.push({ t: lost ? 'Vp not determined: top of sweep lost to the over-range event' : 'no knee inside the sweep: Vp beyond +10 V' + (r.Vp_expected !== null && !ionBad ? `  (Vf + ${sheathK().toFixed(1)}·Te = ${fmtV(r.Vp_expected, 1)}, slope-Te estimate)` : '') });
+        if (r.hysteresis !== null) readout.push({ t: `up/down hysteresis ${r.hysteresis >= 0 ? '+' : '−'}${Math.abs(r.hysteresis).toFixed(2)} V` });
+      }
     } else if (state.layers.fits) {
       if (r.flags.includes('no_plasma_signal')) readout.push({ t: 'no plasma signal above noise', strong: true });
       else if (r.flags.includes('partial_sweep')) readout.push({ t: 'partial sweep: not analysed', strong: true });
@@ -383,9 +404,11 @@
     });
     mg.attr('transform', d => `translate(${x(d.v)},0)`);
     mg.select('line').attr('y1', iv.m.t).attr('y2', bottomY);
-    const flip = d => x(d.v) > w - iv.m.r - 110;
-    mg.select('.marker-text').attr('x', d => flip(d) ? -4 : 4).attr('text-anchor', d => flip(d) ? 'end' : 'start').attr('y', iv.yMainRange[0] - 26).text(d => d.label);
-    mg.select('.marker-sub').attr('x', d => flip(d) ? -4 : 4).attr('text-anchor', d => flip(d) ? 'end' : 'start').attr('y', iv.yMainRange[0] - 14).text(d => d.sub);
+    const flip = d => (x(d.v) > w - iv.m.r - 110) || (d.id === 'vf' && x(d.v) - iv.m.l > 100);
+    const yZ = (!log && Number.isFinite(y(0))) ? Math.max(iv.m.t + 30, Math.min(y(0) - 6, iv.yMainRange[0] - 14)) : iv.yMainRange[0] - 14;
+    const yFor = d => d.id === 'vf' ? yZ : iv.yMainRange[0] - 14;
+    mg.select('.marker-text').attr('x', d => flip(d) ? -5 : 5).attr('text-anchor', d => flip(d) ? 'end' : 'start').attr('y', d => yFor(d) - 12).text(d => d.label);
+    mg.select('.marker-sub').attr('x', d => flip(d) ? -5 : 5).attr('text-anchor', d => flip(d) ? 'end' : 'start').attr('y', d => yFor(d)).text(d => d.sub);
     // readout block (top-left of the main panel)
     const rg = gRead.selectAll('g.rd').data([0]).join(enter => { const gg = enter.append('g').attr('class', 'rd'); gg.append('rect').attr('class', 'readout-bg').attr('rx', 4); return gg; });
     const lines = rg.selectAll('text.readout').data(readout).join('text').attr('class', d => 'readout' + (d.strong ? ' strong' : '')).attr('x', iv.m.l + 10).attr('y', (d, i) => iv.m.t + 16 + i * 14).text(d => d.t);
@@ -418,7 +441,12 @@
       for (let i = 0; i < NG; i++) { const yy = yv(R[i]); if (!Number.isFinite(f.V[i]) || !Number.isFinite(yy)) continue; ctx.beginPath(); ctx.arc(x(f.V[i]), yy, 2, 0, 6.2832); ctx.fill(); }
       if (g.ex.length && state.quantity === 'I') {
         ctx.strokeStyle = tok('--ghost'); ctx.lineWidth = 1;
-        for (const d of g.ex) { const yy = yv(d[1]); if (!Number.isFinite(yy)) continue; ctx.beginPath(); ctx.arc(x(d[0]), Math.max(iv.m.t, Math.min(iv.yMainRange[0], yy)), 2.5, 0, 6.2832); ctx.stroke(); }
+        for (const d of g.ex) {
+          const yy = yv(d[1]); if (!Number.isFinite(yy)) continue; const xx = x(d[0]);
+          if (yy < iv.m.t) { ctx.beginPath(); ctx.moveTo(xx, iv.m.t + 1); ctx.lineTo(xx - 3, iv.m.t + 6); ctx.lineTo(xx + 3, iv.m.t + 6); ctx.closePath(); ctx.stroke(); }
+          else if (yy > iv.yMainRange[0]) { ctx.beginPath(); ctx.moveTo(xx, iv.yMainRange[0] - 1); ctx.lineTo(xx - 3, iv.yMainRange[0] - 6); ctx.lineTo(xx + 3, iv.yMainRange[0] - 6); ctx.closePath(); ctx.stroke(); }
+          else { ctx.beginPath(); ctx.arc(xx, yy, 2.5, 0, 6.2832); ctx.stroke(); }
+        }
       }
     }
     ctx.restore();
@@ -506,24 +534,26 @@
   el.strip.addEventListener('click', ev => { const rect = el.strip.getBoundingClientRect(); setSweep(sweepAtTime((ev.clientX - rect.left) / rect.width * DATA.cols.ts[DATA.cols.ts.length - 1]), true); });
 
   /* ======================= tiles & flags ======================= */
+  const sheathK = () => Math.log(Math.sqrt(state.params.mass * LP.CONST.AMU / (2 * Math.PI * LP.CONST.ME)) / 0.61);
   function tile(l, v, u, n, dim) { return { l, v, u, n, dim }; }
   function renderTiles() {
     const r = results[state.sweep], gas = GAS_LABEL[String(+state.params.mass)] || state.params.mass + ' u';
+    const lost = r.flags.includes('top_of_sweep_unreliable'), ionBad = r.flags.includes('ion_current_positive');
     el.anSub.textContent = `sweep ${state.sweep + 1} · ${r.dir === 'up' ? 'up (−10 → +10 V)' : 'down (+10 → −10 V)'} · ${fmtT(r.tStart)}`;
     const gated = !r.Ie || r.flags.includes('no_plasma_signal');
     const tiles = [];
     tiles.push(tile('Electron temperature (slope)', r.Te !== null ? r.Te.toFixed(2) : '—', 'eV',
-      r.Te !== null ? `R² ${r.Te_r2.toFixed(3)} · ${r.Te_npts} pts` + (r.Te_lo !== null && r.Te_hi !== null ? ` · halves ${r.Te_lo.toFixed(1)} / ${r.Te_hi.toFixed(1)} eV` : '') : (gated ? 'not analysed' : 'no fit'), r.Te === null));
+      r.Te !== null ? (ionBad ? 'window sits on a baseline residual: treat with care · ' : '') + `R² ${r.Te_r2.toFixed(3)} · ${r.Te_npts} pts` + (r.Te_lo !== null && r.Te_hi !== null ? ` · halves ${r.Te_lo.toFixed(1)} / ${r.Te_hi.toFixed(1)} eV` : '') : (gated ? 'not analysed' : 'no fit'), r.Te === null || ionBad));
     tiles.push(tile('Floating potential', r.Vf !== null ? fmtV(r.Vf).replace(' V', '') : (gated ? '—' : (r.flags.includes('no_zero_crossing') ? 'n/a' : '—')), 'V',
-      r.Vf !== null ? `± ${r.dVf !== null ? r.dVf.toFixed(2) + ' V' : '—'} · zero crossing` : (gated ? 'not analysed' : 'no zero crossing in ±10 V'), r.Vf === null));
-    tiles.push(tile('Plasma potential', r.Vp !== null ? fmtV(r.Vp).replace(' V', '') : (gated ? '—' : '> +10'), 'V',
-      r.Vp !== null ? 'max of dI/dV' : (r.flags.includes('top_of_sweep_unreliable') ? 'top of sweep lost' : (r.Vp_expected !== null ? `no knee · Vf + 5.2 Te = ${fmtV(r.Vp_expected, 1)}` : (gated ? 'not analysed' : 'no knee inside the sweep'))), r.Vp === null));
+      r.Vf !== null ? (ionBad ? 'ion side positive: this zero crossing is not a floating potential' : `± ${r.dVf !== null ? r.dVf.toFixed(2) + ' V' : '—'} · zero crossing`) : (gated ? 'not analysed' : 'no zero crossing in ±10 V'), r.Vf === null || ionBad));
+    tiles.push(tile('Plasma potential', r.Vp !== null ? fmtV(r.Vp).replace(' V', '') : ((gated || lost) ? '—' : '> +10'), 'V',
+      r.Vp !== null ? 'knee: max of dI/dV, current flattens beyond it' : (lost ? 'top of sweep lost' : (r.Vp_expected !== null && !ionBad ? `no knee · Vf + ${sheathK().toFixed(1)} Te = ${fmtV(r.Vp_expected, 1)} (slope-Te estimate)` : (gated ? 'not analysed' : 'no knee inside the sweep'))), r.Vp === null));
     const ies = fmtA(r.Ies); tiles.push(tile(r.Vp !== null ? 'Electron saturation current' : 'Peak electron current', ies ? ies.v : '—', ies ? ies.u : '', r.Vp !== null ? 'Ie at Vp' : (r.flags.includes('top_of_sweep_unreliable') ? 'top of sweep lost' : (gated ? 'not analysed' : 'max Ie in sweep (near +10 V) · lower bound for Ies')), r.Ies === null));
-    const iis = fmtA(r.Iis); tiles.push(tile('Ion current at −10 V', iis ? iis.v : '—', iis ? iis.u : '',
+    const iis = fmtA(r.Iis); tiles.push(tile('Ion current (−10 … −9 V mean)', iis ? iis.v : '—', iis ? iis.u : '',
       r.Iis === null ? (gated ? 'not analysed' : '—') : (r.flags.includes('iis_below_noise') ? `below 3σ noise (σ = ${fmtAstr(r.sigma_I)})` : (r.Iis >= 0 ? 'positive: not an ion current' : (r.Iis_vf !== null ? `lowest 1 V mean · fit at Vf: ${fmtAstr(r.Iis_vf)}` : 'mean over lowest 1 V'))), !(r.Iis < 0)));
-    tiles.push(tile('Up/down hysteresis', r.hysteresis !== null ? (r.hysteresis >= 0 ? '+' : '−') + Math.abs(r.hysteresis).toFixed(2) : '—', 'V', r.hysteresis !== null ? `pair ${Math.min(state.sweep, partnerOf(state.sweep)) + 1}+${Math.max(state.sweep, partnerOf(state.sweep)) + 1}: down-sweep ${r.hysteresis >= 0 ? 'lags' : 'leads'} by this much` : (r.flags.includes('hysteresis_unresolved') ? 'pair could not be aligned' : 'needs a clean up + down pair'), r.hysteresis === null));
-    tiles.push(Object.assign(tile('Electron density n\u2091' + (r.Vp === null ? ' (lower bound)' : ''), fmtSci(r.ne), r.ne ? 'm⁻³' : '', r.ne ? `λD = ${fmtLen(r.lambdaD)} · A = ${(state.params.area * 1e6).toPrecision(3)} mm²` : 'needs Te and Ies > 0', !r.ne), { wide: true }));
-    tiles.push(Object.assign(tile('Ion density n\u1d62 (Bohm, ' + gas + ')', fmtSci(r.ni), r.ni ? 'm⁻³' : '', r.ni ? (r.ne ? `n\u1d62/n\u2091 = ${(r.ni / r.ne).toPrecision(2)} (n\u2091 is a lower bound)` : '') : 'needs Te and an ion current above noise', !r.ni), { wide: true }));
+    tiles.push(tile('Up/down hysteresis', r.hysteresis !== null ? (r.hysteresis >= 0 ? '+' : '−') + Math.abs(r.hysteresis).toFixed(2) : '—', 'V', r.hysteresis !== null ? `pair ${Math.min(state.sweep, partnerOf(state.sweep)) + 1}+${Math.max(state.sweep, partnerOf(state.sweep)) + 1}: the down-sweep sits ${Math.abs(r.hysteresis).toFixed(2)} V ${r.hysteresis >= 0 ? 'higher' : 'lower'} in bias than the up-sweep` : (r.flags.includes('hysteresis_unresolved') ? 'pair could not be aligned' : 'needs a clean up + down pair'), r.hysteresis === null));
+    tiles.push(Object.assign(tile('Electron density n\u2091' + (r.Vp === null ? ' (lower bound)' : ''), fmtSci(r.ne), r.ne ? 'm⁻³' : '', r.ne ? (ionBad ? 'built on a doubtful Te and Vf · ' : '') + `λD = ${fmtLen(r.lambdaD)} · A = ${(state.params.area * 1e6).toPrecision(3)} mm²` : (lost ? 'top of sweep lost: no peak electron current' : 'needs Te and Ies > 0'), !r.ne || ionBad), { wide: true }));
+    tiles.push(Object.assign(tile('Ion density n\u1d62 (Bohm, ' + gas + ')', fmtSci(r.ni), r.ni ? 'm⁻³' : '', r.ni ? (r.ne ? `n\u1d62/n\u2091 = ${(r.ni / r.ne).toPrecision(2)} (n\u2091 is a lower bound)` : (lost ? 'no n\u2091 to compare (top of sweep lost)' : 'no n\u2091 to compare')) : 'needs Te and an ion current above noise', !r.ni), { wide: true }));
     el.tiles.innerHTML = '';
     for (const t of tiles) {
       const d = document.createElement('div'); d.className = 'tile' + (t.dim ? ' dim' : '') + (t.wide ? ' wide' : '');
@@ -536,15 +566,19 @@
     const info = document.createElement('span'); info.className = 'flag ok';
     info.textContent = `${r.n} samples · ${r.duration.toFixed(1)} s` + (r.nGlitch ? ` · ${r.nGlitch} excluded` : '') + (r.nDropped - r.nGlitch > 0 ? ` · ${r.nDropped - r.nGlitch} NaN` : '') + (Number.isFinite(r.sigma_I) ? ` · noise σ ${fmtAstr(r.sigma_I)}` : '');
     el.flags.appendChild(info);
-    for (const f of r.flags) { const t = FLAG_TEXT[f] || [f, 'warn']; const s = document.createElement('span'); s.className = 'flag ' + t[1]; s.textContent = t[0]; el.flags.appendChild(s); }
+    for (const f of r.flags) {
+      let t = FLAG_TEXT[f] || [f, 'warn'];
+      if (f === 'no_plasma_signal' && r.gate_reason === 'slope') t = ['dI/dV not resolved above noise at this smoothing window: widen the window', 'warn'];
+      const s = document.createElement('span'); s.className = 'flag ' + t[1]; s.textContent = t[0]; el.flags.appendChild(s);
+    }
   }
 
   /* ======================= trends (small multiples) ======================= */
   const METRICS = [
     { id: 'Te', label: 'Electron temperature', get: r => r.Te, fmt: v => v.toFixed(2) + ' eV', tick: d => d },
     { id: 'Vf', label: 'Floating potential', get: r => r.Vf, fmt: v => fmtV(v), tick: d => (d < 0 ? '−' : '') + Math.abs(d) },
-    { id: 'Ihi', label: 'Current at +10 V', get: r => (r.Ie && !r.flags.includes('no_plasma_signal') && !r.flags.includes('top_of_sweep_unreliable')) ? r.I_hi : null, fmt: v => fmtAstr(v), tick: d => fmtAstr(d, 0) },
-    { id: 'Iis', label: 'Ion current at −10 V', get: r => r.Iis, fmt: v => fmtAstr(v), tick: d => fmtAstr(d, 0) },
+    { id: 'Ihi', label: 'Current near the top of the sweep', get: r => (r.Ie && !r.flags.includes('no_plasma_signal') && !r.flags.includes('top_of_sweep_unreliable')) ? r.I_hi : null, fmt: v => fmtAstr(v), tick: (d, ts) => fmtAin(d, unitFor(d3.max(ts, t => Math.abs(t)) || 1e-9), 0) },
+    { id: 'Iis', label: 'Ion current (−10 … −9 V mean)', get: r => r.Iis, fmt: v => fmtAstr(v), tick: (d, ts) => fmtAin(d, unitFor(d3.max(ts, t => Math.abs(t)) || 1e-9), 0) },
     { id: 'ne', label: 'Electron density (lower bound)', get: r => r.ne, fmt: v => fmtSci(v) + ' m⁻³', tick: d => d === 0 ? '0' : d3.format('.1~e')(d).replace('e+', 'e') },
     { id: 'hys', label: 'Up/down hysteresis', get: r => r.hysteresis, fmt: v => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(2) + ' V', tick: d => (d < 0 ? '−' : '') + Math.abs(d) },
   ];
@@ -565,16 +599,17 @@
   function drawMinis() {
     const ts = DATA.cols.ts, T = ts[ts.length - 1];
     for (const id in minis) {
-      const mm = minis[id], m = mm.m, w = Math.max(160, mm.card.clientWidth - 24), h = 110, ml = 44, mr = 10, mt = 8, mb = 18;
+      const mm = minis[id], m = mm.m, w = Math.max(160, mm.card.clientWidth - 24), h = 110, mr = 10, mt = 8, mb = 18;
       mm.svg.attr('viewBox', `0 0 ${w} ${h}`).attr('width', w).attr('height', h);
       const pts = results.map(r => ({ k: r.k, t: r.tStart, v: m.get(r), dir: r.dir })).filter(d => d.v !== null && Number.isFinite(d.v));
-      const x = d3.scaleLinear().domain([0, T / 60]).range([ml, w - mr]);
       const ext = d3.extent(pts, d => d.v); const lo = Math.min(0, ext[0] || 0), hi = Math.max(0, ext[1] || 0);
       const y = d3.scaleLinear().domain([lo, hi === lo ? lo + 1 : hi]).nice(4).range([h - mb, mt]);
+      const yt = y.ticks(3), tickText = d => m.tick(d, yt);
+      const ml = 12 + Math.max(2, ...yt.map(d => String(tickText(d)).length)) * 6.5;
+      const x = d3.scaleLinear().domain([0, T / 60]).range([ml, w - mr]);
       const g = mm.g; g.selectAll('*').remove();
-      const yt = y.ticks(3);
       g.selectAll('line.gy').data(yt).join('line').attr('class', 'grid-line').attr('x1', ml).attr('x2', w - mr).attr('y1', d => y(d)).attr('y2', d => y(d));
-      g.selectAll('text.ty').data(yt).join('text').attr('class', 'tick-text').attr('x', ml - 6).attr('y', d => y(d) + 3.5).attr('text-anchor', 'end').text(d => m.tick(d));
+      g.selectAll('text.ty').data(yt).join('text').attr('class', 'tick-text').attr('x', ml - 6).attr('y', d => y(d) + 3.5).attr('text-anchor', 'end').text(tickText);
       g.append('line').attr('class', 'axis-line').attr('x1', ml).attr('x2', w - mr).attr('y1', h - mb).attr('y2', h - mb);
       const xt = x.ticks(w < 220 ? 2 : w < 340 ? 3 : 5).filter(d => d > 0);
       g.selectAll('text.tx').data(xt).join('text').attr('class', 'tick-text').attr('x', d => x(d)).attr('y', h - mb + 12).attr('text-anchor', 'middle').text(d => d + ' min');
@@ -592,34 +627,37 @@
         const [mx] = d3.pointer(ev); const k = nearest(mx); const r = results[k]; const v = m.get(r);
         mm.tip.innerHTML = ''; const hd = document.createElement('div'); hd.className = 't-head'; hd.textContent = `sweep ${k + 1} · ${r.dir} · ${fmtT(r.tStart)}`; mm.tip.appendChild(hd);
         const row = document.createElement('div'); row.className = 't-row'; const s = document.createElement('span'); s.textContent = m.label; const b = document.createElement('b'); b.textContent = v !== null && Number.isFinite(v) ? m.fmt(v) : '—'; row.appendChild(s); row.appendChild(b); mm.tip.appendChild(row);
-        mm.tip.classList.add('on'); const tw = mm.tip.offsetWidth || 150; mm.tip.style.left = Math.max(0, Math.min(mx + 12, w - tw)) + 'px'; mm.tip.style.top = '18px';
+        mm.tip.classList.add('on'); const tw = mm.tip.offsetWidth || 150; mm.tip.style.left = Math.max(0, Math.min(mx + 12, w - tw)) + 'px'; mm.tip.style.top = (mm.svg.node().offsetTop + 4) + 'px';
       }).on('pointerleave', () => mm.tip.classList.remove('on')).on('click', ev => { const [mx] = d3.pointer(ev); setSweep(nearest(mx), true); });
     }
   }
 
   /* ======================= results table ======================= */
   const COLS = [
-    ['#', r => r.k + 1], ['dir', r => r.dir], ['t start', r => fmtT(r.tStart)], ['Vf', r => r.Vf !== null ? fmtV(r.Vf) : '—'], ['Vp', r => r.Vp !== null ? fmtV(r.Vp) : (r.Te !== null ? '> +10 V' : '—')],
+    ['#', r => r.k + 1], ['dir', r => r.dir], ['t start', r => fmtT(r.tStart)], ['Vf', r => r.Vf !== null ? fmtV(r.Vf) : '—'], ['Vp', r => r.Vp !== null ? fmtV(r.Vp) : (r.flags.includes('top_of_sweep_unreliable') ? 'lost' : (r.Te !== null ? '> +10 V' : '—'))],
     ['Te (eV)', r => r.Te !== null ? r.Te.toFixed(2) : '—'], ['R²', r => Number.isFinite(r.Te_r2) ? r.Te_r2.toFixed(3) : '—'], ['Te lo/hi', r => r.Te_lo !== null && r.Te_hi !== null ? `${r.Te_lo.toFixed(2)} / ${r.Te_hi.toFixed(2)}` : '—'],
-    ['Ie(+10 V)', r => fmtAstr(r.Ies)], ['Ii(−10 V)', r => fmtAstr(r.Iis)], ['ne (m⁻³)', r => fmtSci(r.ne)], ['ni (m⁻³)', r => fmtSci(r.ni)], ['λD', r => fmtLen(r.lambdaD)],
-    ['hyst.', r => r.hysteresis !== null ? fmtV(r.hysteresis) : '—'], ['σ noise', r => fmtAstr(r.sigma_I)], ['flags', r => r.flags.join(' ')],
+    ['Ies*', r => fmtAstr(r.Ies)], ['Ii(−10…−9 V)', r => fmtAstr(r.Iis)], ['ne (m⁻³)', r => fmtSci(r.ne)], ['ni (m⁻³)', r => fmtSci(r.ni)], ['λD', r => fmtLen(r.lambdaD)],
+    ['hyst.', r => r.hysteresis !== null ? (r.hysteresis >= 0 ? '+' : '−') + Math.abs(r.hysteresis).toFixed(2) + ' V' : '—'], ['σ noise', r => fmtAstr(r.sigma_I)], ['flags', r => r.flags.join(' ')],
   ];
   function renderTable() {
     if (!state.tableOpen) return;
     const thead = el.tbl.tHead, tbody = el.tbl.tBodies[0];
-    thead.innerHTML = ''; const trh = document.createElement('tr'); for (const c of COLS) { const th = document.createElement('th'); th.textContent = c[0]; trh.appendChild(th); } thead.appendChild(trh);
+    thead.innerHTML = ''; const trh = document.createElement('tr'); for (const c of COLS) { const th = document.createElement('th'); th.textContent = c[0]; if (c[0] === 'Ies*') th.title = 'Electron current at Vp when a knee is inside the sweep, otherwise the peak electron current (a lower bound)'; trh.appendChild(th); } thead.appendChild(trh);
     tbody.innerHTML = '';
     for (const r of results) {
       const tr = document.createElement('tr'); if (r.k === state.sweep) tr.className = 'cur';
+      tr.tabIndex = 0; tr.setAttribute('role', 'button'); tr.setAttribute('aria-label', `Go to sweep ${r.k + 1}`);
       for (const c of COLS) { const td = document.createElement('td'); td.textContent = String(c[1](r)); tr.appendChild(td); }
       tr.addEventListener('click', () => setSweep(r.k, true));
+      tr.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); ev.stopPropagation(); setSweep(r.k, true); } });
       tbody.appendChild(tr);
     }
   }
   function tableCSV() {
     const head = ['sweep', 'dir', 't_start_s', 'duration_s', 'n', 'n_excluded', 'sigma_I_A', 'Vf_V', 'dVf_V', 'Vp_V', 'Vp_sheath_estimate_V', 'Te_eV', 'Te_r2', 'Te_window_lo_V', 'Te_window_hi_V', 'Te_lower_half_eV', 'Te_upper_half_eV', 'Ies_A', 'Iis_A', 'Iis_fit_at_Vf_A', 'ne_m3', 'ni_m3', 'lambdaD_m', 'I_lo_A', 'I_hi_A', 'dIdV_max_A_per_V', 'hysteresis_V', 'flags'];
     const num = v => (v === null || v === undefined || !Number.isFinite(v)) ? '' : String(v);
-    const lines = ['# Langmuir Sweep Bench export · channel ' + state.channel + ' · baseline ' + JSON.stringify(state.baseline) + ' · params ' + JSON.stringify(state.params), head.join(',')];
+    const meta = 'Langmuir Sweep Bench export · channel ' + state.channel + ' · baseline ' + JSON.stringify(state.baseline) + ' · params ' + JSON.stringify(state.params) + ' · Ies_A is Ie at Vp when a knee was found, else the peak Ie (lower bound); I_hi_A is the smoothed current half a window below +10 V';
+    const lines = ['"# ' + meta.replace(/"/g, '""') + '"', head.join(',')];
     for (const r of results) lines.push([r.k + 1, r.dir, num(r.tStart), num(r.duration), r.n, r.nGlitch, num(r.sigma_I), num(r.Vf), num(r.dVf), num(r.Vp), num(r.Vp_expected), num(r.Te), num(r.Te_r2), num(r.Te_window[0]), num(r.Te_window[1]), num(r.Te_lo), num(r.Te_hi), num(r.Ies), num(r.Iis), num(r.Iis_vf), num(r.ne), num(r.ni), num(r.lambdaD), num(r.I_lo), num(r.I_hi), num(r.dIdV_max), num(r.hysteresis), '"' + r.flags.join(' ') + '"'].join(','));
     return lines.join('\n');
   }
@@ -640,6 +678,7 @@
     k = Math.max(0, Math.min(LAST, k | 0));
     state.sweep = k; el.sweep.value = String(k); el.sweep.style.setProperty('--pct', (k / LAST * 100) + '%');
     const r = results[k];
+    el.sweep.setAttribute('aria-valuetext', `Sweep ${k + 1} of ${NSEG}, ${r.dir === 'up' ? 'rising −10 to +10 V' : 'falling +10 to −10 V'}`);
     el.sweepLabel.textContent = `Sweep ${k + 1} of ${NSEG} · ${r.dir === 'up' ? '−10 → +10 V' : '+10 → −10 V'}`;
     el.sweepTime.textContent = `t = ${fmtT(r.tStart)} · ${clockAt(r.tStart)} UTC`;
     showSweep(k, animate !== false);
@@ -665,20 +704,25 @@
   segControl('speed', () => state.speed, v => { state.speed = +v; persist(); });
   el.loop.checked = state.loop; el.loop.addEventListener('change', () => { state.loop = el.loop.checked; persist(); });
   document.addEventListener('keydown', ev => {
-    if (ev.target && /^(INPUT|SELECT|TEXTAREA|BUTTON)$/.test(ev.target.tagName) && ev.target.type !== 'range') return;
+    if (ev.target && /^(INPUT|SELECT|TEXTAREA|BUTTON)$/.test(ev.target.tagName) && ev.target !== el.sweep) return;
     if (ev.key === 'ArrowRight') { ev.preventDefault(); setSweep(state.sweep + 1, true); }
     else if (ev.key === 'ArrowLeft') { ev.preventDefault(); setSweep(state.sweep - 1, true); }
     else if (ev.key === ' ' && ev.target.tagName !== 'INPUT') { ev.preventDefault(); setPlaying(!state.playing); }
   });
 
   /* ======================= option controls ======================= */
+  function syncLegend() {
+    $('#lg-points').hidden = !state.layers.points; $('#lg-smooth').hidden = !state.layers.smooth;
+    $('#lg-ion').hidden = !(state.layers.fits && state.quantity === 'I'); $('#lg-te').hidden = !state.layers.fits;
+    el.lgPair.hidden = state.overlay !== 'pair'; el.lgGhost.hidden = state.overlay !== 'all';
+  }
   function refreshAll(recompute) {
     if (recompute) { recomputeAll(); ghostKey = ''; syncBaselineInputs(); }
-    iv.cur = null; layout(); setSweep(state.sweep, false);
+    syncLegend(); iv.cur = null; layout(); setSweep(state.sweep, false);
   }
   segControl('channel', () => state.channel, v => { state.channel = v; stripCache = null; persist(); refreshAll(true); });
-  segControl('overlay', () => state.overlay, v => { state.overlay = v; el.lgPair.hidden = v !== 'pair'; el.lgGhost.hidden = v !== 'all'; persist(); refreshAll(false); });
-  el.lgPair.hidden = state.overlay !== 'pair'; el.lgGhost.hidden = state.overlay !== 'all';
+  segControl('overlay', () => state.overlay, v => { state.overlay = v; persist(); refreshAll(false); });
+  syncLegend();
   segControl('yscale', () => state.yscale, v => { state.yscale = v; persist(); refreshAll(false); });
   segControl('quantity', () => state.quantity, v => { state.quantity = v; persist(); refreshAll(false); });
   segControl('lower', () => state.lower, v => { state.lower = v; persist(); refreshAll(false); });
@@ -720,15 +764,16 @@
   segControl('tewin', () => state.params.teMode, v => { state.params.teMode = v; el.tewinAuto.hidden = v !== 'auto'; el.tewinManual.hidden = v !== 'manual'; persist(); refreshAll(true); });
   el.tewinAuto.hidden = state.params.teMode !== 'auto'; el.tewinManual.hidden = state.params.teMode !== 'manual';
   el.pArea.value = String(+(state.params.area * 1e6).toPrecision(4));
-  el.pArea.addEventListener('change', () => { const v = +el.pArea.value; if (v > 0) { state.params.area = v * 1e-6; persist(); refreshAll(true); } });
+  el.pArea.addEventListener('change', () => { const v = +el.pArea.value; if (v > 0) { state.params.area = v * 1e-6; persist(); refreshAll(true); } else el.pArea.value = String(+(state.params.area * 1e6).toPrecision(4)); });
   (function initGas() {
     const known = Array.from(el.pGas.options).some(o => +o.value === +state.params.mass);
     el.pGas.value = known ? Array.from(el.pGas.options).find(o => +o.value === +state.params.mass).value : 'custom'; el.pMassWrap.hidden = known; el.pMass.value = String(state.params.mass);
   })();
-  el.pGas.addEventListener('change', () => { if (el.pGas.value === 'custom') { el.pMassWrap.hidden = false; } else { el.pMassWrap.hidden = true; state.params.mass = +el.pGas.value; persist(); refreshAll(true); } });
-  el.pMass.addEventListener('change', () => { const v = +el.pMass.value; if (v > 0) { state.params.mass = v; persist(); refreshAll(true); } });
+  el.pGas.addEventListener('change', () => { if (el.pGas.value === 'custom') { el.pMassWrap.hidden = false; el.pMass.value = String(state.params.mass); el.pMass.focus(); } else { el.pMassWrap.hidden = true; state.params.mass = +el.pGas.value; persist(); refreshAll(true); } });
+  el.pMass.addEventListener('change', () => { const v = +el.pMass.value; if (v > 0) { state.params.mass = v; persist(); refreshAll(true); } else el.pMass.value = String(state.params.mass); });
 
   /* ======================= boot ======================= */
+  el.sweep.max = String(LAST);
   recomputeAll();
   syncBaselineInputs();
   buildMinis();

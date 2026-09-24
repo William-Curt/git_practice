@@ -65,3 +65,12 @@ D. (v2.3) Pairing: partner(k) = k+1 for even k, k−1 for odd k (an up-sweep wit
 E. (v2.3) Step 7 reference index: iRef = ip if Vp was accepted; otherwise iRef = the index of the first maximum of Ie_s over [lo, hi]. Ie_ref = Ie_s[iRef]; Step 8 Ies = Ie_s[iRef] as before.
 F. (v2.3) Signal gate derivative threshold is 5·sigma_b (was 6·sigma_b). The span criterion (10·sigma_I) is unchanged.
 G. (v2.3) When the gate fires 'no_plasma_signal' it also removes any 'no_zero_crossing' and 'vf_multiple_crossings' flags set in step 5 (Vf/dVf are null as before).
+H. (v2.4) Vp acceptance is replaced by a flattening test. With ip = argmax dIdV over [lo,hi], accept Vp = V[ip] only if ALL hold:
+   (a) V[ip] ≤ Vmax − 1.0;
+   (b) Is[hi] ≥ Is[ip] − 3·sigma_I and Is[hi] ≤ 1.4·Is[ip] (the current neither drops nor keeps growing by more than 40 % after the knee);
+   (c) the median of dIdV[j] over all j in (ip, hi] with V[j] ≥ V[ip] + 0.3 is ≤ 0.7·dIdV[ip] (median of an even count = mean of the two middle values; if no such j exists the test fails);
+   (d) Vf is null or V[ip] > Vf + 1.0.
+   Otherwise 'vp_beyond_range' + 'not_saturated' as before. Amendment A (over-range sweeps skip the test) is unchanged.
+I. (v2.4) Step 6 also records gate_reason: 'span' if the span test failed, else 'slope' if the derivative test failed, else null (informational; does not change any other output).
+J. (v2.4) Pair step: in the "copy the partner's value" branch, copy only when partner(q) == k (symmetric pairs); a clamped, non-symmetric partner falls through to the normal evaluation and is rejected when not pairable. (No effect on this log.)
+K. (v2.4b) Condition (b) of amendment H becomes baseline-invariant: Is[hi] ≥ Is[ip] − 3·sigma_I and Is[hi] − Is[ip] ≤ 0.4·(Is[ip] − Is[lo]). Conditions (a), (c), (d) unchanged.
