@@ -257,6 +257,7 @@ figcaption { color: var(--muted); font-size: 12px; margin-top: 6px; }
 .flag::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--warn); }
 .flag.crit::before { background: var(--crit); }
 .flag.ok::before { background: var(--good); }
+.flag.info::before { background: var(--accent); }
 .flags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 10px; }
 .param { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; align-items: center; padding-block: 6px; }
 .param .l { font-size: 12.5px; color: var(--ink-2); }
@@ -510,7 +511,7 @@ tr.cur:hover td { background: var(--accent-soft); }
           <li><b>Over-range screening</b> drops samples where I2 is below −50 nA or jumps by more than 1 µA between neighbours (the ADC wrap-around), before anything else.</li>
           <li><b>Baseline</b>: a straight line fitted to the plasma-off sweeps (default 75–80) is subtracted; a constant or no baseline are also available.</li>
           <li><b>Smoothing</b> is a centred moving average over the chosen window; <b>dI/dV</b> is the least-squares slope over the same window. The residual scatter gives the noise σ<sub>I</sub>.</li>
-          <li><b>Signal gate</b>: a sweep needs a current span above 10 σ<sub>I</sub> and a slope above 6 σ<sub>b</sub> to be analysed; otherwise it is reported as “no plasma signal”. Partial sweeps (not reaching ±8 V) are shown but not analysed.</li>
+          <li><b>Signal gate</b>: a sweep needs a current span above 10 σ<sub>I</sub> and a slope above 5 σ<sub>b</sub> to be analysed; otherwise it is reported as “no plasma signal”. Partial sweeps (not reaching ±8 V) are shown but not analysed.</li>
           <li><b>Ion-saturation fit</b>: a straight line through the most negative part of the sweep (the chosen fraction). Its extrapolation I<sub>ion</sub>(V) is subtracted to give the electron current I<sub>e</sub>. <b>I<sub>is</sub></b> is the mean current over the lowest 1 V; the fit extrapolated to V<sub>f</sub> is shown as a secondary value.</li>
         </ol>
       </div>
@@ -519,9 +520,9 @@ tr.cur:hover td { background: var(--accent-soft); }
           <li><b>V<sub>f</sub></b> (floating potential): where the smoothed current crosses zero, with an uncertainty σ<sub>I</sub>/(dI/dV). Multiple crossings are resolved by a local line fit and flagged.</li>
           <li><b>V<sub>p</sub></b> (plasma potential): the maximum of dI/dV, accepted only when it lies at least 1 V inside the sweep and the slope falls to 70 % of the peak beyond it. Otherwise the knee is beyond +10 V and the sheath estimate V<sub>f</sub> + T<sub>e</sub> ln(√(m<sub>i</sub>/2πm<sub>e</sub>)/0.61) is shown instead.</li>
           <li><b>T<sub>e</sub></b>: slope of ln I<sub>e</sub> vs V over the transition window, T<sub>e</sub> = 1/slope in eV, with R². The window's lower and upper halves are fitted separately; a ratio above 1.3 flags a non-exponential branch.</li>
-          <li><b>I<sub>es</sub></b>: electron current at V<sub>p</sub>, or at +10 V as a lower bound when no knee is found.</li>
+          <li><b>I<sub>es</sub></b>: electron current at V<sub>p</sub>, or the peak electron current of the sweep (normally at +10 V) as a lower bound when no knee is found.</li>
           <li><b>n<sub>e</sub></b> = I<sub>es</sub> / (e A √(eT<sub>e</sub>/2πm<sub>e</sub>)); <b>n<sub>i</sub></b> = |I<sub>is</sub>| / (0.61 e A √(eT<sub>e</sub>/m<sub>i</sub>)); <b>λ<sub>D</sub></b> = √(ε₀T<sub>e</sub>/n<sub>e</sub>e). Both densities scale as 1/A, so set the real collecting area.</li>
-          <li><b>Hysteresis</b>: the voltage shift that best aligns the down-sweep onto its up-sweep partner over −5 … +9 V.</li>
+          <li><b>Hysteresis</b>: each up-sweep is paired with the down-sweep that follows it; the value is the bias shift that best aligns the down-sweep onto the up-sweep over −5 … +9 V (positive: the down-sweep reaches each current at a higher bias).</li>
         </ol>
       </div>
     </div>

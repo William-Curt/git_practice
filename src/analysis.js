@@ -14,11 +14,12 @@
 
   /* ---- segmentation: half-sweeps between DAC ramp reversals ---- */
   function segmentBounds(dac) {
+    // d[i] = sign(dac[i+1] - dac[i]); a new half-sweep starts at row i where d[i] != d[i-1] (the extremum row opens the next segment)
     const n = dac.length, bounds = [0];
     let prev = 0;
     for (let i = 0; i + 1 < n; i++) {
       const d = Math.sign(dac[i + 1] - dac[i]);
-      if (i > 0 && d !== prev) bounds.push(i + 1);
+      if (i > 0 && d !== prev) bounds.push(i);
       prev = d;
     }
     bounds.push(n);
@@ -200,7 +201,10 @@
     let ip = lo; for (let i = lo; i <= hi; i++) if (dIdV[i] > dIdV[ip]) ip = i;
     res.ip = ip; res.dIdV_max = dIdV[ip];
     const span = Is[hi] - Is[lo];
-    if (span < 10 * sigma_I || dIdV[ip] < 6 * sigma_b) { flags.push('no_plasma_signal'); res.Vf = null; res.dVf = null; return res; }
+    if (span < 10 * sigma_I || dIdV[ip] < 5 * sigma_b) {
+      for (const f of ['no_zero_crossing', 'vf_multiple_crossings']) { const i = flags.indexOf(f); if (i >= 0) flags.splice(i, 1); }
+      flags.push('no_plasma_signal'); res.Vf = null; res.dVf = null; return res;
+    }
     let Vp = null;
     const topUnreliable = p.nGlitch > 0;
     if (topUnreliable) flags.push('top_of_sweep_unreliable');
@@ -211,7 +215,9 @@
     res.Vp = Vp;
 
     // Step 7 electron temperature
-    const iRef = Vp !== null ? ip : hi, IeRef = Ie_s[iRef];
+    let iRef = ip;
+    if (Vp === null) { iRef = lo; for (let i = lo; i <= hi; i++) if (Ie_s[i] > Ie_s[iRef]) iRef = i; }
+    const IeRef = Ie_s[iRef];
     const teIdx = [], teMask = new Uint8Array(n), noise3 = 3 * sigma_I;
     if (p.teMode === 'manual') {
       for (let j = 0; j < n; j++) if (V[j] >= p.teVlo && V[j] <= p.teVhi && Ie_s[j] > noise3) { teIdx.push(j); teMask[j] = 1; }
@@ -222,6 +228,7 @@
       teIdx.reverse();
     }
     res.teMask = teMask; res.Te_npts = teIdx.length;
+    if (teIdx.length) { let vlo = Infinity, vhi = -Infinity; for (const j of teIdx) { if (V[j] < vlo) vlo = V[j]; if (V[j] > vhi) vhi = V[j]; } res.Te_window = [vlo, vhi]; }
     let Te = null;
     if (teIdx.length < 8) flags.push('te_insufficient');
     else {
@@ -230,8 +237,6 @@
       res.te_alpha = f.a; res.te_beta = f.b; res.Te_r2 = f.r2;
       if (f.b > 0) Te = 1 / f.b; else flags.push('te_negative_slope');
       if (!(f.r2 >= 0.9)) flags.push('te_poor_fit');
-      let vlo = Infinity, vhi = -Infinity; for (const j of teIdx) { if (V[j] < vlo) vlo = V[j]; if (V[j] > vhi) vhi = V[j]; }
-      res.Te_window = [vlo, vhi];
       const sorted = teIdx.slice().sort((a, b) => V[a] - V[b]), m = sorted.length, half = Math.floor(m / 2);
       const A = sorted.slice(0, half), B = sorted.slice(half);
       if (A.length >= 4 && B.length >= 4) {
@@ -280,7 +285,7 @@
     for (let i = 0; i <= 10; i++) { const h = Math.round((h0 - 0.1 + 0.02 * i) * 100) / 100, r = rms(h); if (r < best) { best = r; h1 = h; } }
     return Math.abs(h1) >= 1.98 ? null : h1;
   }
-  function partnerOf(k, nSeg) { let p = (k % 2 === 1) ? k + 1 : k - 1; if (p < 0) p = 1; if (p > nSeg - 1) p = nSeg - 2; return p; }
+  function partnerOf(k, nSeg) { let p = (k % 2 === 0) ? k + 1 : k - 1; if (p > nSeg - 1) p = nSeg - 2; return p; }
   const fullSignal = r => r && r.Is && !r.flags.includes('partial_sweep') && !r.flags.includes('insufficient') && !r.flags.includes('no_plasma_signal') && !r.flags.includes('ion_fit_insufficient');
   const pairable = r => fullSignal(r) && !r.flags.includes('overrange_event');
 

@@ -4,7 +4,11 @@ Langmuir sweep analysis -- reference implementation of ANALYSIS_SPEC_v2.md
 including the "v2.1 amendments" section (A: over-range sweeps get
 'top_of_sweep_unreliable' and no Vp/Ies/ne/lambdaD/hysteresis; B: hysteresis
 h from a coarse 0.1 V / fine 0.02 V search of Is_up(V) vs Is_down(V + h);
-C (v2.2): Vp is accepted only if additionally Is[hi] >= Is[ip] - 3*sigma_I).
+C (v2.2): Vp is accepted only if additionally Is[hi] >= Is[ip] - 3*sigma_I;
+D (v2.3): partner(k) = k+1 for even k, k-1 for odd k, partner > nSeg-1 -> nSeg-2;
+E (v2.3): when Vp is not accepted iRef = first maximum of Ie_s over [lo, hi];
+F (v2.3): gate derivative threshold 5*sigma_b; G (v2.3): the gate removes the
+step-5 flags 'no_zero_crossing' / 'vf_multiple_crossings' when it fires).
 
 Only numpy + pandas are used (no scipy).  Every numerical step is plain
 arithmetic (window means, ordinary least squares, argmax, clamped linear
@@ -19,7 +23,12 @@ CLI:
         [--baseline none|const:<A>|ref:<from>,<to>]      (default ref:74,79)
         [--f-ion 0.2] [--window 31] [--te-lo 0.02] [--te-hi 0.30] [--te-manual Vlo,Vhi]
         [--area 1e-5] [--mass 39.948] [--out results.json]
-        [--dump-segments k1,k2,...] [--csv-out table.csv]
+        [--dump-segments k1,k2,...] [--csv-out table.csv] [--quantize-float32]
+
+--quantize-float32 rounds V2, I1, I2 and the seconds-since-first-timestamp
+through float32 right after loading (t_start/duration then come from the
+float32 seconds), so the reference sees exactly the values the applet's
+Float32Array columns hold.
 
 Resolved spec ambiguities (all choices are the most literal reading; each is
 also listed in the final report):
@@ -42,11 +51,10 @@ also listed in the final report):
      only produced by skipped steps (Ie, Ie_s, Iion, Te_local, te_mask,
      ion_mask) are null, not empty arrays.
  A6  Step 5 is evaluated before the step-6 gate.  When 'no_plasma_signal'
-     fires, Vf and dVf are reset to null as the spec says, but the flags that
-     step 5 already produced ('no_zero_crossing' / 'vf_multiple_crossings')
-     are kept -- the spec never says to remove them.  The Vp acceptance test
-     is not run in that case, so 'vp_beyond_range' / 'not_saturated' are NOT
-     added by the gate.
+     fires, Vf and dVf are reset to null and (amendment G) the step-5 flags
+     'no_zero_crossing' / 'vf_multiple_crossings' are removed.  The Vp
+     acceptance test is not run in that case, so 'vp_beyond_range' /
+     'not_saturated' are NOT added by the gate.
  A7  iVf = index of the point with V closest to Vf: first index on a tie
      (argmin of |V - Vf|).
  A8  In the multiple-crossings branch the local OLS uses every point with
@@ -67,14 +75,15 @@ also listed in the final report):
      -1 also ends it).  teMask is stored ascending by V.
  A12 Te_local is part of step 11 and is therefore null for a segment that is
      partial / insufficient / no_plasma_signal / ion_fit_insufficient.
- A13 Hysteresis (v2.1 amendment B): partner(k) = k+1 for odd k, k-1 for
-     even k, clamped to [0, nSeg-1], and partner(0) = 1.  The value is
-     computed per unordered pair {k, partner(k)} and stored on k; because
-     partner() is symmetric for every k >= 1 this is the "same value on both
-     members" of the spec.  Segment 0 gets the (0,1) value only if 0 is
-     itself eligible, so it never overwrites segment 1's (1,2) value.  If
-     the partner is k itself (clamping) or both members have the same
-     direction, hysteresis = null.  A pair is evaluated only when neither
+ A13 Hysteresis (v2.1 amendment B, pairing per v2.3 amendment D):
+     partner(k) = k+1 for even k, k-1 for odd k; if partner > nSeg-1 then
+     partner = nSeg-2.  The value is computed per unordered pair
+     {k, partner(k)} and stored on k; partner() is symmetric for every pair
+     (2m, 2m+1), which is the "same value on both members" of the spec.  The
+     only asymmetric case is an even last segment (nSeg odd): its partner
+     nSeg-2 is paired with nSeg-3 by its own rule, so the last segment's
+     value never overwrites its partner's.  If the partner is k itself or
+     both members have the same direction, hysteresis = null.  A pair is evaluated only when neither
      member has 'overrange_event', 'partial_sweep', 'insufficient' or
      'no_plasma_signal' (an 'ion_fit_insufficient' segment still counts
      because Is exists).  rms(h) is taken over the up-sweep points with
@@ -89,9 +98,11 @@ also listed in the final report):
      pair, which cannot occur here because segment 0 is partial).
  A13b Amendment A: 'top_of_sweep_unreliable' is added right after the
      signal gate for any segment with n_glitch > 0; the Vp test is not run;
-     Ies/ne/lambdaD/hysteresis are null; Te uses iRef = hi.  A glitch
-     segment that fails the gate is handled by the gate alone
-     ('no_plasma_signal', no 'top_of_sweep_unreliable').
+     Ies/ne/lambdaD/hysteresis are null.  A glitch segment that fails the
+     gate is handled by the gate alone ('no_plasma_signal', no
+     'top_of_sweep_unreliable').  Amendment E (later) supersedes A's
+     "iRef = hi": whenever Vp is not accepted, including glitch segments,
+     iRef = lo + first argmax of Ie_s over [lo, hi].
  A14 interp(xp, fp, x) has numpy.interp semantics: j = largest index with
      xp[j] <= x; x == xp[j] -> fp[j]; otherwise fp[j] + (x - xp[j]) *
      ((fp[j+1] - fp[j]) / (xp[j+1] - xp[j])); x < xp[0] -> fp[0];
@@ -121,6 +132,8 @@ EPS0 = 8.8541878128e-12         # F/m
 # Screening thresholds (spec step 0a)
 OVERRANGE_NEG = -5e-8           # A
 OVERRANGE_JUMP = 1e-6           # A
+# Signal gate (step 6): dIdV_max must reach GATE_DERIV_FACTOR * sigma_b (v2.3 amendment F)
+GATE_DERIV_FACTOR = 5.0
 
 SCALAR_KEYS = ["k", "dir", "t_start", "duration", "n", "n_dropped", "n_glitch",
                "Vmin", "Vmax", "sigma_I", "sigma_b", "a_i", "b_i",
@@ -264,11 +277,18 @@ def segment_boundaries(dac):
     return [0] + T + [N]
 
 
-def load_csv(path):
+def _q32(a):
+    """Round a float64 array through float32 and back (the applet stores these
+    columns as Float32Array; --quantize-float32 makes the reference see the
+    same values)."""
+    return a.astype(np.float32).astype(np.float64)
+
+
+def load_csv(path, quantize_float32=False):
     df = pd.read_csv(path)
     ts = pd.to_datetime(df["timestamp"])
     t_rel = (ts - ts.iloc[0]).dt.total_seconds().to_numpy(dtype=float)
-    return {
+    data = {
         "DAC": df["DAC"].to_numpy(dtype=float),
         "V2": df["V2"].to_numpy(dtype=float),
         "I1": df["I1"].to_numpy(dtype=float),
@@ -276,6 +296,12 @@ def load_csv(path):
         "t_rel": t_rel,
         "N": len(df),
     }
+    if quantize_float32:
+        # V2/I1/I2 and the seconds-since-first-timestamp are rounded to float32
+        # right after loading; DAC stays as is (integers, exact in Uint16).
+        for key in ("V2", "I1", "I2", "t_rel"):
+            data[key] = _q32(data[key])
+    return data
 
 
 # ---------------------------------------------------------------------------
@@ -464,7 +490,10 @@ def analyze_segment(data, B, k, params, baseline, dump=False):
     if dump:
         dmp["idx"]["ip"] = ip
         dmp["idx"]["iVf"] = iVf
-    if span < 10.0 * sigma_I or dIdV_max < 6.0 * sigma_b:
+    if span < 10.0 * sigma_I or dIdV_max < GATE_DERIV_FACTOR * sigma_b:      # v2.3 amendment F
+        for f in ("no_zero_crossing", "vf_multiple_crossings"):              # v2.3 amendment G
+            if f in flags:
+                flags.remove(f)
         flags.append("no_plasma_signal")
         out["Vf"], out["dVf"] = None, None                                   # A6
         if dump:
@@ -489,7 +518,8 @@ def analyze_segment(data, B, k, params, baseline, dump=False):
     out["Vp"] = Vp
 
     # ---- Step 7: electron temperature ----------------------------------------------------
-    iRef = ip if Vp is not None else hi
+    # v2.3 amendment E: iRef = ip if Vp accepted, else first maximum of Ie_s over [lo, hi]
+    iRef = ip if Vp is not None else lo + int(np.argmax(Ie_s[lo:hi + 1]))
     Ie_ref = float(Ie_s[iRef])
     three_sigma = 3.0 * sigma_I
     if te_manual is None:                                                    # A11
@@ -632,16 +662,11 @@ def hysteresis_shift(VU, IsU, VD, IsD):
 
 
 def partner_of(k, nseg):
-    if k == 0:
-        p = 1
-    elif k % 2 == 1:
-        p = k + 1
-    else:
-        p = k - 1
-    if p < 0:
-        p = 0
+    """v2.3 amendment D: up-sweep k (even) pairs with the following down-sweep k+1;
+    odd k pairs with k-1; a partner beyond the last segment becomes nSeg-2."""
+    p = k + 1 if k % 2 == 0 else k - 1
     if p > nseg - 1:
-        p = nseg - 1
+        p = nseg - 2
     return p
 
 
@@ -673,7 +698,7 @@ def compute_hysteresis(segments, states):
 # Driver
 # ---------------------------------------------------------------------------
 def run(csv_path, params, dump_segments=()):
-    data = load_csv(csv_path)
+    data = load_csv(csv_path, quantize_float32=params.get("quantize_float32", False))
     B = segment_boundaries(data["DAC"])
     nseg = len(B) - 1
     baseline = {"mode": params["baseline"], "value": params["baseline_value"],
@@ -735,6 +760,9 @@ def parse_args(argv=None):
     p.add_argument("--out", default="results.json")
     p.add_argument("--dump-segments", default="", help="comma-separated segment indices to dump full arrays for")
     p.add_argument("--csv-out", default=None, help="write one row per segment with the scalar outputs")
+    p.add_argument("--quantize-float32", action="store_true",
+                   help="round V2/I1/I2 and the relative timestamps through float32 right after "
+                        "loading (matches the applet's Float32Array columns)")
     a = p.parse_args(argv)
 
     if a.window < 3 or a.window % 2 == 0:
@@ -743,6 +771,7 @@ def parse_args(argv=None):
         "csv": a.csv, "channel": a.channel, "f_ion": a.f_ion, "window": a.window,
         "te_lo": a.te_lo, "te_hi": a.te_hi, "area": a.area, "mass": a.mass,
         "baseline": "none", "baseline_value": None, "baseline_ref": None, "te_manual": None,
+        "quantize_float32": bool(a.quantize_float32),
     }
     b = a.baseline.strip()
     if b == "none":

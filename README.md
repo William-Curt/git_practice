@@ -47,16 +47,28 @@ The CSV must have the columns `timestamp, DAC, GSE_I, V1, I1, I2, V2`
 ## Reference analysis in Python
 
 `analysis/langmuir_analysis.py` is a numpy-only implementation of exactly the
-same algorithm (spec in `analysis/ANALYSIS_SPEC_v2.md`); it is used to
-cross-check the JavaScript port and gives a scriptable way to export per-sweep
-results:
+same algorithm (spec in `analysis/ANALYSIS_SPEC_v2.md`, amendments at the end);
+it gives a scriptable way to export per-sweep results and is used to
+cross-check the JavaScript port:
 
 ```
 python analysis/langmuir_analysis.py data/sweep_log.csv --csv-out results.csv
 python analysis/langmuir_analysis.py data/sweep_log.csv --baseline none --te-manual -4,2 --out results.json
 ```
 
-`analysis/results_default.csv` is the output for the default settings.
+`analysis/results_default.csv` is the output for the applet's default settings
+(channel I2, plasma-off baseline from sweeps 75–80, window 31, ion region 20 %,
+Tₑ window 2–30 %, area 10 mm², argon).
+
+To verify that the JavaScript in the applet reproduces the Python numbers
+(they agree to machine precision on this log):
+
+```
+python analysis/langmuir_analysis.py data/sweep_log.csv --quantize-float32 --out ref.json --dump-segments 1,10,30
+node analysis/compare_js_py.mjs ref.json          # or: ... ref.json none / const
+```
+
+`--quantize-float32` rounds the inputs the way the applet stores them.
 
 ## Layout
 

@@ -133,7 +133,7 @@
     te_insufficient: ['Too few points in the T_e window', 'crit'],
     te_negative_slope: ['ln I_e slope ≤ 0: no exponential transition found', 'crit'],
     te_poor_fit: ['T_e fit R² below 0.9', 'warn'],
-    te_nonexponential: ['Electron branch is not a single exponential (upper/lower half T_e differ by >30 %)', 'warn'],
+    te_nonexponential: ['Electron branch is not a single exponential: slope T_e differs by >30 % between the window halves', 'info'],
     iis_below_noise: ['Ion current below 3 σ noise: n_i not computed', 'warn'],
     ion_current_positive: ['Ion-side current is positive: offset not removed or no ion current', 'warn'],
     ion_fit_insufficient: ['Too few points for the ion-saturation fit', 'crit'],
@@ -518,7 +518,7 @@
       r.Vf !== null ? `± ${r.dVf !== null ? r.dVf.toFixed(2) + ' V' : '—'} · zero crossing` : (gated ? 'not analysed' : 'no zero crossing in ±10 V'), r.Vf === null));
     tiles.push(tile('Plasma potential', r.Vp !== null ? fmtV(r.Vp).replace(' V', '') : (gated ? '—' : '> +10'), 'V',
       r.Vp !== null ? 'max of dI/dV' : (r.flags.includes('top_of_sweep_unreliable') ? 'top of sweep lost' : (r.Vp_expected !== null ? `no knee · Vf + 5.2 Te = ${fmtV(r.Vp_expected, 1)}` : (gated ? 'not analysed' : 'no knee inside the sweep'))), r.Vp === null));
-    const ies = fmtA(r.Ies); tiles.push(tile(r.Vp !== null ? 'Electron saturation current' : 'Electron current at +10 V', ies ? ies.v : '—', ies ? ies.u : '', r.Vp !== null ? 'Ie at Vp' : (r.flags.includes('top_of_sweep_unreliable') ? 'top of sweep lost' : (gated ? 'not analysed' : 'lower bound for Ies')), r.Ies === null));
+    const ies = fmtA(r.Ies); tiles.push(tile(r.Vp !== null ? 'Electron saturation current' : 'Peak electron current', ies ? ies.v : '—', ies ? ies.u : '', r.Vp !== null ? 'Ie at Vp' : (r.flags.includes('top_of_sweep_unreliable') ? 'top of sweep lost' : (gated ? 'not analysed' : 'max Ie in sweep (near +10 V) · lower bound for Ies')), r.Ies === null));
     const iis = fmtA(r.Iis); tiles.push(tile('Ion current at −10 V', iis ? iis.v : '—', iis ? iis.u : '',
       r.Iis === null ? (gated ? 'not analysed' : '—') : (r.flags.includes('iis_below_noise') ? `below 3σ noise (σ = ${fmtAstr(r.sigma_I)})` : (r.Iis >= 0 ? 'positive: not an ion current' : (r.Iis_vf !== null ? `lowest 1 V mean · fit at Vf: ${fmtAstr(r.Iis_vf)}` : 'mean over lowest 1 V'))), !(r.Iis < 0)));
     tiles.push(tile('Up/down hysteresis', r.hysteresis !== null ? (r.hysteresis >= 0 ? '+' : '−') + Math.abs(r.hysteresis).toFixed(2) : '—', 'V', r.hysteresis !== null ? `pair ${Math.min(state.sweep, partnerOf(state.sweep)) + 1}+${Math.max(state.sweep, partnerOf(state.sweep)) + 1}: down-sweep ${r.hysteresis >= 0 ? 'lags' : 'leads'} by this much` : (r.flags.includes('hysteresis_unresolved') ? 'pair could not be aligned' : 'needs a clean up + down pair'), r.hysteresis === null));
