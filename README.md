@@ -4,11 +4,17 @@ An interactive, self-contained viewer and analysis bench for the Langmuir-probe
 sweep log recorded on 2026-09-17 (`data/sweep_log.csv`, 116,729 samples,
 81 half-sweeps of a ±10 V triangle bias).
 
-**Open `langmuir_applet.html` in any modern browser.** Everything (the data, the
-analysis and the charts) is embedded in that one file; it only fetches the D3
-library and two fonts from a CDN.
+Two pages, both self-contained (the data, the analysis and the charts are
+embedded; only the D3 library and two fonts come from a CDN):
 
-## What the applet does
+- **`langmuir_basics.html`** – the simple, first-timer view: one I–V curve with
+  its regions labelled in plain words, a sweep slider with play, and three
+  numbers (floating potential, electron temperature, a density estimate) each
+  with a one-sentence meaning, plus a short "how to read this curve" guide.
+- **`langmuir_applet.html`** – the full bench with every option and diagnostic
+  (described below).
+
+## What the full applet does
 
 - **Animated sweep scrubber** – drag the slider, press play (½× to 4×, looping),
   use ← / → / space, or click anywhere on the whole-log strip or on a trend
@@ -39,6 +45,7 @@ library and two fonts from a CDN.
 ```
 pip install numpy pandas
 python src/build.py data/sweep_log.csv -o langmuir_applet.html
+python src/build.py data/sweep_log.csv -o langmuir_basics.html --variant simple
 ```
 
 The CSV must have the columns `timestamp, DAC, GSE_I, V1, I1, I2, V2`
@@ -74,9 +81,12 @@ node analysis/compare_js_py.mjs ref.json          # or: ... ref.json none / cons
 
 | Path | Contents |
 |---|---|
-| `langmuir_applet.html` | the built applet (open this) |
+| `langmuir_basics.html` | the simple learner view (start here) |
+| `langmuir_applet.html` | the full analysis bench |
 | `data/sweep_log.csv` | the raw sweep log |
-| `src/template.html`, `src/app.js`, `src/analysis.js` | page, UI/charts, analysis (JS) |
+| `src/template.html`, `src/app.js` | full bench page and UI |
+| `src/template_simple.html`, `src/app_simple.js` | simple view page and UI |
+| `src/analysis.js` | the analysis engine shared by both pages |
 | `src/build.py` | packs the CSV and assembles the applet |
 | `analysis/langmuir_analysis.py` | Python reference implementation + CLI |
 | `analysis/ANALYSIS_SPEC_v2.md` | the algorithm, step by step |

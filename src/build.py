@@ -2,6 +2,7 @@
 """Build the Langmuir Sweep Bench applet from a sweep CSV.
 
     python build.py data/sweep_log.csv -o langmuir_applet.html
+    python build.py data/sweep_log.csv -o langmuir_basics.html --variant simple
 
 Reads the CSV (timestamp, DAC, GSE_I, V1, I1, I2, V2), packs the columns into
 base64 typed arrays, and inlines them into the page together with the analysis
@@ -59,13 +60,19 @@ def pack(csv_path):
     return payload
 
 
-def build(csv_path, out_path, d3_src=D3_CDN, fragment=False, template=None):
+def build(csv_path, out_path, d3_src=D3_CDN, fragment=False, template=None, variant="full", full_url=""):
     payload = pack(csv_path)
     read = lambda name: open(os.path.join(HERE, name), encoding="utf-8").read()
-    page = template if template is not None else read("template.html")
+    if variant == "simple":
+        page = template if template is not None else read("template_simple.html")
+        app = read("app_simple.js")
+    else:
+        page = template if template is not None else read("template.html")
+        app = read("app.js")
     analysis = read("analysis.js")
-    app = read("app.js")
     data_js = "window.SWEEP_DATA = " + json.dumps(payload, separators=(",", ":")) + ";"
+    if full_url:
+        data_js += " window.FULL_BENCH_URL = " + json.dumps(full_url) + ";"
     scripts = (
         f'<script src="{d3_src}"></script>\n'
         f"<script>{data_js}</script>\n"
@@ -82,7 +89,7 @@ def build(csv_path, out_path, d3_src=D3_CDN, fragment=False, template=None):
             + body.replace("<title>", "<title>", 1)
         )
         # move <title>, <meta>, <link>, <style> into <head>; everything from the first <div into <body>
-        cut = html.index('<div class="app"')
+        cut = html.index('<div class="app"' if '<div class="app"' in html else '<div class="page"')
         head, rest = html[:cut], html[cut:]
         html = head + "</head>\n<body>\n" + rest + "</body>\n</html>\n"
     with open(out_path, "w", encoding="utf-8") as f:
@@ -97,6 +104,8 @@ if __name__ == "__main__":
     ap.add_argument("-o", "--out", default="langmuir_applet.html")
     ap.add_argument("--d3", default=D3_CDN, help="script src for d3 (default: cdnjs 7.9.0)")
     ap.add_argument("--fragment", action="store_true", help="emit a body fragment (no <html>/<head>/<body>) for artifact publishing")
+    ap.add_argument("--variant", choices=["full", "simple"], default="full", help="'full' = Langmuir Sweep Bench, 'simple' = Langmuir Probe Basics")
+    ap.add_argument("--full-url", default="", help="(simple variant) link to the full bench page")
     a = ap.parse_args()
-    info = build(a.csv, a.out, a.d3, a.fragment)
+    info = build(a.csv, a.out, a.d3, a.fragment, variant=a.variant, full_url=a.full_url)
     print(f"wrote {a.out}: {info['rows']} rows, {info['segments']} half-sweeps, {info['bytes']/1e6:.2f} MB")

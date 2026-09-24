@@ -1,0 +1,218 @@
+<title>Langmuir Probe Basics</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f2f3f6; --surface: #fcfcfd; --surface-2: #f5f6f9; --surface-3: #eceef2;
+  --ink: #12151b; --ink-2: #4d5565; --muted: #838a97;
+  --grid: #e4e6eb; --axis: #c3c8d1; --border: rgba(18,21,27,0.10); --border-strong: rgba(18,21,27,0.18);
+  --accent: #2a78d6; --accent-soft: rgba(42,120,214,0.12);
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #4a3aa7; --ghost: #b8bdc7;
+  --ion: #1baf7a; --trans: #4a3aa7; --elec: #eb6834;
+  --good: #0ca30c; --warn: #fab219; --crit: #d03b3b;
+  --tooltip-bg: #12151b; --tooltip-ink: #f4f5f8;
+  --shadow: 0 1px 2px rgba(18,21,27,0.06), 0 8px 24px -12px rgba(18,21,27,0.18);
+  --font-ui: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --radius: 12px; --radius-sm: 7px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0e1013; --surface: #171a1f; --surface-2: #1d2128; --surface-3: #242931;
+    --ink: #eef0f3; --ink-2: #b5bbc7; --muted: #8a919d;
+    --grid: #262a31; --axis: #3b4049; --border: rgba(255,255,255,0.10); --border-strong: rgba(255,255,255,0.18);
+    --accent: #3987e5; --accent-soft: rgba(57,135,229,0.18);
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #9085e9; --ghost: #4a505b;
+    --ion: #199e70; --trans: #9085e9; --elec: #d95926;
+    --crit: #e05a5a; --tooltip-bg: #f1f2f5; --tooltip-ink: #12151b;
+    --shadow: 0 1px 2px rgba(0,0,0,0.4), 0 10px 30px -14px rgba(0,0,0,0.7);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0e1013; --surface: #171a1f; --surface-2: #1d2128; --surface-3: #242931;
+  --ink: #eef0f3; --ink-2: #b5bbc7; --muted: #8a919d;
+  --grid: #262a31; --axis: #3b4049; --border: rgba(255,255,255,0.10); --border-strong: rgba(255,255,255,0.18);
+  --accent: #3987e5; --accent-soft: rgba(57,135,229,0.18);
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #9085e9; --ghost: #4a505b;
+  --ion: #199e70; --trans: #9085e9; --elec: #d95926;
+  --crit: #e05a5a; --tooltip-bg: #f1f2f5; --tooltip-ink: #12151b;
+  --shadow: 0 1px 2px rgba(0,0,0,0.4), 0 10px 30px -14px rgba(0,0,0,0.7);
+}
+* { box-sizing: border-box; }
+html { height: 100%; }
+body { margin: 0; min-height: 100%; background: var(--bg); color: var(--ink); font-family: var(--font-ui); font-size: 15px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+.page { max-width: 920px; margin: 0 auto; padding-inline: clamp(16px, 3vw, 28px); padding-block: 0 56px; position: relative; }
+.page::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: var(--accent); }
+a { color: var(--accent); }
+button, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+h1 { font-size: 26px; font-weight: 600; letter-spacing: -0.01em; margin: 26px 0 6px; text-wrap: balance; }
+.lede { margin: 0 0 18px; color: var(--ink-2); max-width: 66ch; }
+.lede b { color: var(--ink); font-weight: 600; }
+h2 { font-size: 17px; font-weight: 600; margin: 26px 0 8px; }
+p { max-width: 68ch; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
+
+/* picker */
+.picker { display: flex; align-items: center; gap: 14px; padding: 14px 16px; flex-wrap: wrap; }
+.play { width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--border-strong); background: var(--surface); display: inline-grid; place-items: center; flex: none; transition: transform .12s ease, background .12s ease; }
+.play:hover { background: var(--surface-2); } .play:active { transform: scale(0.94); }
+.play svg { width: 18px; height: 18px; fill: var(--ink); }
+.play .ic-pause { display: none; } .play[aria-pressed="true"] .ic-play { display: none; } .play[aria-pressed="true"] .ic-pause { display: block; }
+.picker-main { flex: 1 1 260px; display: grid; gap: 2px; min-width: 0; }
+.picker-labels { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 13px; color: var(--muted); }
+.picker-labels .cur { color: var(--ink); font-weight: 600; font-size: 15px; }
+.range { -webkit-appearance: none; appearance: none; width: 100%; height: 30px; background: transparent; margin: 0; }
+.range::-webkit-slider-runnable-track { height: 5px; border-radius: 3px; background: linear-gradient(to right, var(--accent) 0 var(--pct, 0%), var(--axis) var(--pct, 0%) 100%); }
+.range::-moz-range-track { height: 5px; border-radius: 3px; background: var(--axis); } .range::-moz-range-progress { height: 5px; border-radius: 3px; background: var(--accent); }
+.range::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 20px; height: 20px; margin-top: -7.5px; border-radius: 50%; background: var(--surface); border: 2px solid var(--accent); box-shadow: 0 1px 4px rgba(0,0,0,0.25); }
+.range::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: var(--surface); border: 2px solid var(--accent); }
+.seg { display: inline-flex; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); overflow: hidden; background: var(--surface); }
+.seg button { padding: 6px 12px; border: 0; background: transparent; color: var(--ink-2); font-size: 13px; font-weight: 500; border-right: 1px solid var(--border); }
+.seg button:last-child { border-right: 0; } .seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--ink); }
+.picker .hint { flex-basis: 100%; margin: 0; font-size: 13px; color: var(--muted); }
+.kbd { font-family: var(--font-mono); font-size: 11px; padding: 1px 5px; border: 1px solid var(--border-strong); border-radius: 4px; background: var(--surface); }
+
+/* chart */
+.figure { margin: 14px 0 0; padding: 14px 16px 10px; }
+.fig-head { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 6px 14px; margin-bottom: 4px; }
+.fig-head h2 { margin: 0; font-size: 16px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; color: var(--ink-2); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { display: inline-block; width: 16px; border-top: 2px solid var(--k); border-radius: 2px; }
+.legend i.dot { width: 8px; height: 8px; border: 0; border-radius: 50%; background: var(--k); opacity: .7; }
+.legend i.box { width: 12px; height: 12px; border: 0; border-radius: 3px; background: var(--k); opacity: .25; }
+.chart { position: relative; width: 100%; }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.chart .grid-line { stroke: var(--grid); stroke-width: 1; shape-rendering: crispEdges; }
+.chart .axis-line, .chart .zero-line { stroke: var(--axis); stroke-width: 1; shape-rendering: crispEdges; }
+.chart .tick-text { fill: var(--muted); font-family: var(--font-mono); font-size: 11px; }
+.chart .axis-title { fill: var(--ink-2); font-size: 12px; font-weight: 500; }
+.chart .pt { fill: var(--s1); opacity: 0.35; }
+.chart .line-main { fill: none; stroke: var(--s1); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
+.chart .line-te { fill: none; stroke: var(--trans); stroke-width: 2; stroke-dasharray: 5 4; }
+.chart .region { opacity: 0.09; }
+.chart .region-label { font-size: 12px; font-weight: 600; fill: var(--ink); }
+.chart .region-sub { font-size: 11px; fill: var(--ink-2); }
+.chart .marker-line { stroke: var(--ink-2); stroke-width: 1.2; stroke-dasharray: 3 3; }
+.chart .marker-text { fill: var(--ink); font-size: 12px; font-weight: 600; }
+.chart .marker-sub { fill: var(--ink-2); font-size: 11px; font-family: var(--font-mono); }
+.chart .note { fill: var(--ink-2); font-size: 12px; }
+.chart .crosshair { stroke: var(--ink-2); stroke-width: 1; opacity: 0; pointer-events: none; }
+.chart .hover-dot { fill: var(--s1); stroke: var(--surface); stroke-width: 2; opacity: 0; pointer-events: none; }
+.chart .hit { fill: transparent; cursor: crosshair; }
+.tip { position: absolute; z-index: 5; pointer-events: none; opacity: 0; transition: opacity .1s ease; background: var(--tooltip-bg); color: var(--tooltip-ink); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; line-height: 1.4; box-shadow: 0 6px 20px -6px rgba(0,0,0,0.4); }
+.tip.on { opacity: 1; }
+.tip b { font-family: var(--font-mono); font-weight: 500; }
+figcaption { color: var(--muted); font-size: 12.5px; margin-top: 8px; }
+
+/* numbers */
+.numbers { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }
+.num { padding: 14px 16px; }
+.num .l { font-size: 12.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
+.num .v { font-size: 30px; font-weight: 600; letter-spacing: -0.02em; margin-top: 4px; line-height: 1.1; }
+.num .v small { font-size: 15px; font-weight: 500; color: var(--ink-2); margin-left: 4px; }
+.num .v.dim { color: var(--muted); font-size: 22px; }
+.num .m { font-size: 13px; color: var(--ink-2); margin-top: 8px; line-height: 1.45; }
+.num .m b { color: var(--ink); font-weight: 600; }
+.badge { display: inline-block; font-size: 11.5px; padding: 2px 8px; border-radius: 999px; background: var(--surface-3); color: var(--ink-2); margin-top: 8px; }
+.badge.crit { color: var(--crit); }
+
+/* run overview */
+.overview { padding: 14px 16px 10px; margin-top: 14px; }
+.overview .t { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 6px 14px; }
+.overview h2 { margin: 0; font-size: 16px; }
+.overview p { margin: 2px 0 6px; color: var(--ink-2); font-size: 13.5px; }
+.mini .line { fill: none; stroke: var(--s1); stroke-width: 1.5; }
+.mini .area { fill: var(--s1); opacity: 0.08; }
+.mini .pt { fill: var(--s1); stroke: var(--surface); stroke-width: 1.5; }
+.mini .pt.cur { stroke: var(--surface); stroke-width: 2; }
+.mini .cursor { stroke: var(--ink-2); stroke-width: 1; }
+.mini .hit { fill: transparent; cursor: pointer; }
+.mini .band { fill: var(--ghost); opacity: 0.18; }
+
+/* explainer */
+.explain { display: grid; gap: 14px; margin-top: 8px; }
+.step { display: grid; grid-template-columns: 34px 1fr; gap: 12px; align-items: start; }
+.step .n { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-weight: 600; font-size: 13px; color: var(--ink); background: var(--k, var(--surface-3)); }
+.step h3 { margin: 4px 0 4px; font-size: 15px; font-weight: 600; }
+.step p { margin: 0 0 4px; color: var(--ink-2); font-size: 14px; }
+.step .f { font-family: var(--font-mono); font-size: 13px; color: var(--ink); background: var(--surface-2); padding: 6px 10px; border-radius: var(--radius-sm); display: inline-block; margin-top: 4px; }
+.footer { margin-top: 28px; padding-top: 14px; border-top: 1px solid var(--border); color: var(--ink-2); font-size: 13.5px; }
+@media (max-width: 700px) { .numbers { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 480px) { h1 { font-size: 22px; } .num .v { font-size: 26px; } }
+@media (prefers-reduced-motion: reduce) { .play, .tip { transition: none; } }
+</style>
+<div class="page" id="page">
+  <h1>Langmuir Probe Basics</h1>
+  <p class="lede">A <b>Langmuir probe</b> is a small metal tip pushed into a plasma. You sweep its voltage (the <b>bias</b>) and record the current it collects. The shape of that current-versus-voltage curve tells you how hot the electrons are and how many there are. Below is your log from <span id="when" class="mono"></span>: <span id="nsweeps" class="mono"></span> sweeps from −10 V to +10 V and back. Pick a sweep and read the curve.</p>
+
+  <section class="card picker" aria-label="Choose a sweep">
+    <button class="play" id="play" aria-pressed="false" aria-label="Play through the sweeps" title="Play / pause (space)">
+      <svg class="ic-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9-5.5z"/></svg>
+      <svg class="ic-pause" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 2.5h3v11h-3zM9.5 2.5h3v11h-3z"/></svg>
+    </button>
+    <div class="picker-main">
+      <div class="picker-labels"><span class="cur" id="sweep-label">Sweep 2</span><span id="sweep-time" class="mono"></span></div>
+      <input class="range" type="range" id="sweep" min="0" max="80" value="1" step="1" aria-label="Sweep number">
+    </div>
+    <div class="seg" id="yscale" role="group" aria-label="Current axis"><button type="button" data-v="lin" aria-pressed="true">Normal axis</button><button type="button" data-v="log">Log axis</button></div>
+    <p class="hint">Drag the slider or press <span class="kbd">←</span> <span class="kbd">→</span>; <span class="kbd">space</span> plays. On the log axis the exponential part of the curve becomes a straight line.</p>
+  </section>
+
+  <figure class="card figure">
+    <div class="fig-head">
+      <h2 id="fig-title">Current collected vs. bias voltage</h2>
+      <div class="legend">
+        <span><i class="dot" style="--k:var(--s1)"></i>measured samples</span>
+        <span><i style="--k:var(--s1)"></i>smoothed</span>
+        <span><i style="--k:var(--trans);border-top-style:dashed"></i>exponential fit → Tₑ</span>
+      </div>
+    </div>
+    <div class="chart" id="chart"><svg id="svg" role="img" aria-labelledby="fig-title"></svg><div class="tip" id="tip"></div></div>
+    <figcaption id="caption">Positive current means the probe is collecting electrons; negative means ions. A small instrument offset has already been subtracted (see step 1 below).</figcaption>
+  </figure>
+
+  <div class="numbers" id="numbers"></div>
+
+  <section class="card overview">
+    <div class="t"><h2>How the plasma changed during the run</h2><span id="ov-cur" class="mono"></span></div>
+    <p>Electron density estimate for every sweep, in time order. The plasma was clearly turned up and down several times. Grey bands are sweeps that could not be analysed (a signal glitch, or the plasma off). Click anywhere to jump to that sweep.</p>
+    <div class="chart mini" id="mini"><svg id="mini-svg" role="img" aria-label="Electron density over the run"></svg><div class="tip" id="mini-tip"></div></div>
+  </section>
+
+  <h2>How to read this curve</h2>
+  <div class="explain">
+    <div class="step" style="--k:var(--surface-3)"><div class="n">1</div><div>
+      <h3>First, remove what the electronics add</h3>
+      <p>The current channel reads about 150 nA even with no plasma, plus a tiny leak that grows with voltage. The last seven sweeps of the log were taken with the plasma off, so we fit a straight line to them and subtract it from every sweep. Without this step the curve never crosses zero and the numbers below come out wrong.</p>
+    </div></div>
+    <div class="step" style="--k:var(--ion)"><div class="n">2</div><div>
+      <h3>Ion side (very negative bias)</h3>
+      <p>At −10 V the probe repels electrons and only the heavier, slower ions reach it, so the current is small and negative: the <b>ion saturation current</b>. It is only a few tens of nanoamps here, and it barely changes with voltage.</p>
+    </div></div>
+    <div class="step" style="--k:var(--surface-3)"><div class="n">3</div><div>
+      <h3>Floating potential V<sub>f</sub></h3>
+      <p>As the bias rises, the fastest electrons start to arrive. Where the electron and ion currents cancel, the net current is zero: that voltage is the <b>floating potential</b>, the voltage an insulated object in this plasma would settle at.</p>
+    </div></div>
+    <div class="step" style="--k:var(--trans)"><div class="n">4</div><div>
+      <h3>Transition region → electron temperature</h3>
+      <p>Just above V<sub>f</sub> the electron current grows <b>exponentially</b> with voltage, because the electrons have a spread of energies (a Maxwellian distribution). The steeper the rise, the colder the electrons. Fitting a straight line to ln(I<sub>e</sub>) against V gives the electron temperature in electron-volts:</p>
+      <span class="f">T<sub>e</sub> [eV] = 1 / slope of ln(I<sub>e</sub>) vs V &nbsp;·&nbsp; 1 eV ≈ 11,600 K</span>
+      <p style="margin-top:6px">In this log the rise is not a single clean exponential (the slope keeps changing), so T<sub>e</sub> depends a little on which part you fit. The dashed line shows the part used here.</p>
+    </div></div>
+    <div class="step" style="--k:var(--elec)"><div class="n">5</div><div>
+      <h3>Electron side and the plasma potential</h3>
+      <p>Eventually the probe collects every electron that reaches it and the curve should bend over (the <b>knee</b>) at the <b>plasma potential</b> V<sub>p</sub>, then flatten: the <b>electron saturation current</b>. In this log the current is still climbing at +10 V, so the knee lies beyond the sweep range. That is why the density below is a <em>lower bound</em>: it uses the current at +10 V instead of the true saturation current.</p>
+      <span class="f">n<sub>e</sub> = I<sub>es</sub> / ( e · A · √( e T<sub>e</sub> / 2π m<sub>e</sub> ) ) &nbsp;·&nbsp; A = probe area (10 mm² assumed)</span>
+    </div></div>
+  </div>
+
+  <p class="footer">Sweeps 9–10 and 59–60 contain a recording glitch (the current went off-scale and wrapped around) and sweeps 75–81 were taken with the plasma off; those show up as “not analysed”. When you want every knob (fit windows, probe area, gas, hysteresis, tables, dI/dV) open the full <a id="full-link" href="#">Langmuir Sweep Bench</a>.</p>
+</div>
