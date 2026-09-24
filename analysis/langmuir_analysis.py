@@ -8,7 +8,11 @@ C (v2.2): Vp is accepted only if additionally Is[hi] >= Is[ip] - 3*sigma_I;
 D (v2.3): partner(k) = k+1 for even k, k-1 for odd k, partner > nSeg-1 -> nSeg-2;
 E (v2.3): when Vp is not accepted iRef = first maximum of Ie_s over [lo, hi];
 F (v2.3): gate derivative threshold 5*sigma_b; G (v2.3): the gate removes the
-step-5 flags 'no_zero_crossing' / 'vf_multiple_crossings' when it fires).
+step-5 flags 'no_zero_crossing' / 'vf_multiple_crossings' when it fires;
+H (v2.4): Vp acceptance is a four-condition flattening test (see A17), with
+condition (b) in its baseline-invariant v2.4b form (amendment K);
+I (v2.4): per-segment gate_reason 'span' | 'slope' | null;
+J (v2.4): the pair step copies a partner's value only for symmetric pairs).
 
 Only numpy + pandas are used (no scipy).  Every numerical step is plain
 arithmetic (window means, ordinary least squares, argmax, clamped linear
@@ -112,6 +116,22 @@ also listed in the final report):
      bad (overrange) rows, `excluded_VI` = their [V2, I2] pairs (always I2,
      as requested, regardless of --channel).  NaN-channel rows that are not
      bad are not listed (they have no I value to plot).
+ A17 Amendment H (flattening test), non-glitch segments only: Vp = V[ip] iff
+     (a) V[ip] <= Vmax - 1.0; (b) Is[hi] >= Is[ip] - 3*sigma_I and
+     Is[hi] - Is[ip] <= 0.4*(Is[ip] - Is[lo]) (amendment K, v2.4b; the
+     original H form was Is[hi] <= 1.4*Is[ip]); (c) the tail set T = {dIdV[j] : ip < j <= hi, V[j] >= V[ip] + 0.3} is
+     non-empty and median(T) <= 0.7*dIdV[ip], median = middle element of the
+     sorted values, or (s[m/2-1] + s[m/2]) / 2 for even m; (d) Vf is null or
+     V[ip] > Vf + 1.0, where Vf is the step-5 value.  The four booleans, the
+     tail median and the tail count are written to dump.idx.vp_test.
+ A18 Amendment I: gate_reason is a per-segment output key ('span' if the
+     span test failed, else 'slope' if the derivative test failed, else
+     null); it is null for segments that never reach step 6.
+ A19 Amendment J: a segment copies its partner's cached value (and shares
+     the 'hysteresis_unresolved' flag) only when partner(partner(k)) == k;
+     an asymmetric partner (only possible for an even last segment) is
+     evaluated on its own and rejected if the pair is not eligible; its
+     unresolved flag, if any, is put on that segment only.
 """
 import argparse
 import json
@@ -139,7 +159,7 @@ SCALAR_KEYS = ["k", "dir", "t_start", "duration", "n", "n_dropped", "n_glitch",
                "Vmin", "Vmax", "sigma_I", "sigma_b", "a_i", "b_i",
                "Vf", "dVf", "Vp", "Te", "Te_r2", "Te_window", "Te_npts", "Te_lo", "Te_hi",
                "te_alpha", "te_beta", "Ies", "Iis", "Iis_vf", "ne", "ni", "lambdaD",
-               "Vp_expected", "I_lo", "I_hi", "dIdV_max", "hysteresis", "flags"]
+               "Vp_expected", "I_lo", "I_hi", "dIdV_max", "gate_reason", "hysteresis", "flags"]
 
 DUMP_KEYS = ["V", "I", "Is", "dIdV", "Ie", "Ie_s", "Iion", "Te_local", "te_mask", "ion_mask",
              "excluded_rows", "excluded_VI", "idx", "crossings"]
@@ -163,6 +183,16 @@ def seq_sum_rows(M):
     for j in range(1, M.shape[1]):
         acc = acc + M[:, j]
     return acc
+
+
+def median_plain(values):
+    """Median of a plain list: middle of the sorted values, or the mean of the
+    two middle values for an even count (spec amendment H)."""
+    s = sorted(values)
+    m = len(s)
+    if m % 2 == 1:
+        return s[m // 2]
+    return (s[m // 2 - 1] + s[m // 2]) / 2.0
 
 
 def window_bounds(i, n, h):
@@ -490,7 +520,10 @@ def analyze_segment(data, B, k, params, baseline, dump=False):
     if dump:
         dmp["idx"]["ip"] = ip
         dmp["idx"]["iVf"] = iVf
-    if span < 10.0 * sigma_I or dIdV_max < GATE_DERIV_FACTOR * sigma_b:      # v2.3 amendment F
+    span_fail = span < 10.0 * sigma_I
+    slope_fail = dIdV_max < GATE_DERIV_FACTOR * sigma_b                      # v2.3 amendment F
+    out["gate_reason"] = "span" if span_fail else ("slope" if slope_fail else None)   # v2.4 amendment I
+    if span_fail or slope_fail:
         for f in ("no_zero_crossing", "vf_multiple_crossings"):              # v2.3 amendment G
             if f in flags:
                 flags.remove(f)
@@ -505,16 +538,23 @@ def analyze_segment(data, B, k, params, baseline, dump=False):
     if n_glitch > 0:                                                         # v2.1 amendment A
         flags.append("top_of_sweep_unreliable")
     else:
-        # v2.2 amendment C: all three conditions must hold
-        if V[ip] <= Vmax - 1.0 and Is[hi] >= Is[ip] - 3.0 * sigma_I:
-            thr = 0.7 * dIdV[ip]
-            for j in range(ip + 1, hi + 1):
-                if dIdV[j] <= thr:
-                    Vp = float(V[ip])
-                    break
-        if Vp is None:
+        # v2.4 amendment H: flattening test, all four conditions must hold (A17)
+        cond_a = bool(V[ip] <= Vmax - 1.0)
+        # v2.4b amendment K: baseline-invariant growth limit (relative to the span below the knee)
+        cond_b = bool(Is[hi] >= Is[ip] - 3.0 * sigma_I
+                      and Is[hi] - Is[ip] <= 0.4 * (Is[ip] - Is[lo]))
+        tail = [float(dIdV[j]) for j in range(ip + 1, hi + 1) if V[j] >= V[ip] + 0.3]
+        tail_median = median_plain(tail) if tail else None
+        cond_c = bool(tail_median is not None and tail_median <= 0.7 * dIdV[ip])
+        cond_d = bool(Vf is None or V[ip] > Vf + 1.0)
+        if cond_a and cond_b and cond_c and cond_d:
+            Vp = float(V[ip])
+        else:
             flags.append("vp_beyond_range")
             flags.append("not_saturated")
+        if dump:
+            dmp["idx"]["vp_test"] = {"a": cond_a, "b": cond_b, "c": cond_c, "d": cond_d,
+                                     "tail_median": tail_median, "n_tail": len(tail)}
     out["Vp"] = Vp
 
     # ---- Step 7: electron temperature ----------------------------------------------------
@@ -674,23 +714,31 @@ def _eligible(st):
     return st["full"] and not st["overrange"]
 
 
+def _pairable(states, k, p):
+    return p != k and _eligible(states[k]) and _eligible(states[p]) and states[k]["dir"] != states[p]["dir"]
+
+
 def compute_hysteresis(segments, states):
     nseg = len(segments)
     cache = {}
     for k in range(nseg):
         p = partner_of(k, nseg)
-        val = None
-        if p != k and _eligible(states[k]) and _eligible(states[p]) and states[k]["dir"] != states[p]["dir"]:
-            key = (min(k, p), max(k, p))
-            if key not in cache:
-                u, d = (k, p) if states[k]["dir"] == "up" else (p, k)
-                cache[key] = hysteresis_shift(states[u]["V"], states[u]["Is"],
-                                              states[d]["V"], states[d]["Is"])
-            val, unresolved = cache[key]
-            if unresolved:
-                for member in (k, p):
-                    if "hysteresis_unresolved" not in segments[member]["flags"]:
-                        segments[member]["flags"].append("hysteresis_unresolved")
+        symmetric = partner_of(p, nseg) == k                                  # v2.4 amendment J
+        key = (min(k, p), max(k, p))
+        if symmetric and key in cache:
+            val, unresolved = cache[key]                                      # copy branch
+        elif _pairable(states, k, p):
+            u, d = (k, p) if states[k]["dir"] == "up" else (p, k)
+            val, unresolved = hysteresis_shift(states[u]["V"], states[u]["Is"],
+                                               states[d]["V"], states[d]["Is"])
+            if symmetric:
+                cache[key] = (val, unresolved)
+        else:
+            val, unresolved = None, False
+        if unresolved:
+            for member in ((k, p) if symmetric else (k,)):
+                if "hysteresis_unresolved" not in segments[member]["flags"]:
+                    segments[member]["flags"].append("hysteresis_unresolved")
         segments[k]["hysteresis"] = val
 
 
