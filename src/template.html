@@ -1,0 +1,530 @@
+<title>Langmuir Sweep Bench</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f2f3f6;
+  --surface: #fcfcfd;
+  --surface-2: #f5f6f9;
+  --surface-3: #eceef2;
+  --ink: #12151b;
+  --ink-2: #4d5565;
+  --muted: #838a97;
+  --grid: #e4e6eb;
+  --axis: #c3c8d1;
+  --border: rgba(18,21,27,0.10);
+  --border-strong: rgba(18,21,27,0.18);
+  --accent: #2a78d6;
+  --accent-soft: rgba(42,120,214,0.12);
+  --s1: #2a78d6;   /* measured current */
+  --s2: #eb6834;   /* derivative / down-sweep */
+  --s3: #1baf7a;   /* ion-saturation fit */
+  --s4: #4a3aa7;   /* electron-temperature fit */
+  --ghost: #b8bdc7;
+  --good: #0ca30c;
+  --good-text: #006300;
+  --warn: #fab219;
+  --warn-text: #8a5a00;
+  --crit: #d03b3b;
+  --tooltip-bg: #12151b;
+  --tooltip-ink: #f4f5f8;
+  --shadow: 0 1px 2px rgba(18,21,27,0.06), 0 8px 24px -12px rgba(18,21,27,0.18);
+  --font-ui: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --radius: 10px;
+  --radius-sm: 6px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0e1013;
+    --surface: #171a1f;
+    --surface-2: #1d2128;
+    --surface-3: #242931;
+    --ink: #eef0f3;
+    --ink-2: #b5bbc7;
+    --muted: #8a919d;
+    --grid: #262a31;
+    --axis: #3b4049;
+    --border: rgba(255,255,255,0.10);
+    --border-strong: rgba(255,255,255,0.18);
+    --accent: #3987e5;
+    --accent-soft: rgba(57,135,229,0.18);
+    --s1: #3987e5;
+    --s2: #d95926;
+    --s3: #199e70;
+    --s4: #9085e9;
+    --ghost: #4a505b;
+    --good: #0ca30c;
+    --good-text: #4cc94c;
+    --warn: #fab219;
+    --warn-text: #fab219;
+    --crit: #e05a5a;
+    --tooltip-bg: #f1f2f5;
+    --tooltip-ink: #12151b;
+    --shadow: 0 1px 2px rgba(0,0,0,0.4), 0 10px 30px -14px rgba(0,0,0,0.7);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0e1013;
+  --surface: #171a1f;
+  --surface-2: #1d2128;
+  --surface-3: #242931;
+  --ink: #eef0f3;
+  --ink-2: #b5bbc7;
+  --muted: #8a919d;
+  --grid: #262a31;
+  --axis: #3b4049;
+  --border: rgba(255,255,255,0.10);
+  --border-strong: rgba(255,255,255,0.18);
+  --accent: #3987e5;
+  --accent-soft: rgba(57,135,229,0.18);
+  --s1: #3987e5;
+  --s2: #d95926;
+  --s3: #199e70;
+  --s4: #9085e9;
+  --ghost: #4a505b;
+  --good: #0ca30c;
+  --good-text: #4cc94c;
+  --warn: #fab219;
+  --warn-text: #fab219;
+  --crit: #e05a5a;
+  --tooltip-bg: #f1f2f5;
+  --tooltip-ink: #12151b;
+  --shadow: 0 1px 2px rgba(0,0,0,0.4), 0 10px 30px -14px rgba(0,0,0,0.7);
+}
+
+* { box-sizing: border-box; }
+html { height: 100%; }
+body {
+  margin: 0; min-height: 100%;
+  background: var(--bg); color: var(--ink);
+  font-family: var(--font-ui); font-size: 14px; line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+.app { max-width: 1440px; margin: 0 auto; padding-inline: clamp(16px, 2.5vw, 32px); padding-block: 0 48px; }
+a { color: var(--accent); }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* ---------- masthead ---------- */
+.masthead {
+  display: flex; flex-wrap: wrap; gap: 12px 32px; align-items: flex-end; justify-content: space-between;
+  padding-block: 22px 16px; border-bottom: 1px solid var(--border);
+}
+.masthead::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: var(--accent); }
+.app { position: relative; }
+.brand h1 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.2; text-wrap: balance; }
+.brand p { margin: 4px 0 0; color: var(--ink-2); font-size: 13px; }
+.brand p .mono { color: var(--ink-2); }
+.facts { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px;
+  background: var(--surface-2); border: 1px solid var(--border); color: var(--ink-2); font-size: 12px; white-space: nowrap;
+}
+.chip b { color: var(--ink); font-weight: 600; }
+.chip.mono { font-size: 11.5px; }
+
+/* ---------- scrubber (sweep timeline) ---------- */
+.scrubber { padding-block: 16px 6px; display: grid; gap: 10px; }
+.scrub-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.play {
+  width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--border-strong); background: var(--surface);
+  display: inline-grid; place-items: center; box-shadow: var(--shadow); flex: none; transition: transform .12s ease, background .12s ease;
+}
+.play:hover { background: var(--surface-2); }
+.play:active { transform: scale(0.94); }
+.play svg { width: 16px; height: 16px; fill: var(--ink); }
+.play .ic-pause { display: none; }
+.play[aria-pressed="true"] .ic-play { display: none; }
+.play[aria-pressed="true"] .ic-pause { display: block; }
+.scrub-main { flex: 1 1 320px; display: grid; gap: 4px; min-width: 0; }
+.scrub-labels { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
+.scrub-labels .cur { color: var(--ink); font-weight: 600; }
+.range { -webkit-appearance: none; appearance: none; width: 100%; height: 28px; background: transparent; margin: 0; }
+.range::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(to right, var(--accent) 0 var(--pct, 0%), var(--axis) var(--pct, 0%) 100%); }
+.range::-moz-range-track { height: 4px; border-radius: 2px; background: var(--axis); }
+.range::-moz-range-progress { height: 4px; border-radius: 2px; background: var(--accent); }
+.range::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; width: 18px; height: 18px; margin-top: -7px; border-radius: 50%;
+  background: var(--surface); border: 2px solid var(--accent); box-shadow: 0 1px 4px rgba(0,0,0,0.25); transition: transform .12s ease;
+}
+.range::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: var(--surface); border: 2px solid var(--accent); box-shadow: 0 1px 4px rgba(0,0,0,0.25); }
+.range:hover::-webkit-slider-thumb, .range:focus-visible::-webkit-slider-thumb { transform: scale(1.15); }
+.range.small { height: 22px; }
+.range.small::-webkit-slider-thumb { width: 14px; height: 14px; margin-top: -5px; }
+.scrub-side { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.seg {
+  display: inline-flex; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); overflow: hidden; background: var(--surface);
+}
+.seg button {
+  padding: 5px 10px; border: 0; background: transparent; color: var(--ink-2); font-size: 12.5px; font-weight: 500; line-height: 1.2;
+  border-right: 1px solid var(--border);
+}
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--ink); }
+.seg button:hover:not([aria-pressed="true"]) { background: var(--surface-2); }
+.strip-wrap { position: relative; height: 64px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface); overflow: hidden; }
+.strip-wrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: pointer; }
+.strip-caption { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--muted); padding: 0 2px; }
+
+/* ---------- filter row ---------- */
+.filters { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; padding-block: 10px 14px; border-bottom: 1px solid var(--border); }
+.filters .lab, .ctl .lab { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.ctl { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; max-width: 100%; }
+.checks { display: inline-flex; flex-wrap: wrap; gap: 4px 12px; }
+.checks label { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; color: var(--ink-2); cursor: pointer; user-select: none; }
+.checks input { accent-color: var(--accent); margin: 0; }
+.checks .key { display: inline-block; width: 14px; height: 0; border-top: 2px solid var(--k, var(--ink)); border-radius: 2px; }
+.checks .key.dot { width: 7px; height: 7px; border: 0; border-radius: 50%; background: var(--k); }
+select.sel, input.num {
+  padding: 4px 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--surface); color: var(--ink); font-size: 12.5px;
+}
+input.num { width: 84px; font-family: var(--font-mono); }
+
+/* ---------- main grid ---------- */
+.grid { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 20px; padding-block: 18px; align-items: start; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
+figure.card { margin: 0; padding: 14px 16px 10px; min-width: 0; }
+.fig-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 6px 16px; margin-bottom: 4px; }
+.fig-head h2 { margin: 0; font-size: 15px; font-weight: 600; }
+.fig-head .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--ink-2); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { display: inline-block; width: 16px; border-top: 2px solid var(--k); border-radius: 2px; }
+.legend i.dot { width: 7px; height: 7px; border: 0; border-radius: 50%; background: var(--k); opacity: .7; }
+.legend i.ghost { border-color: var(--ghost); }
+.chart { position: relative; width: 100%; }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.chart canvas { position: absolute; left: 0; top: 0; pointer-events: none; }
+.chart .grid-line { stroke: var(--grid); stroke-width: 1; shape-rendering: crispEdges; }
+.chart .axis-line { stroke: var(--axis); stroke-width: 1; shape-rendering: crispEdges; }
+.chart .zero-line { stroke: var(--axis); stroke-width: 1; shape-rendering: crispEdges; }
+.chart .tick-text { fill: var(--muted); font-family: var(--font-mono); font-size: 10.5px; font-variant-numeric: tabular-nums; }
+.chart .axis-title { fill: var(--ink-2); font-size: 11.5px; font-weight: 500; }
+.chart .line-main { fill: none; stroke: var(--s1); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.chart .line-pair { fill: none; stroke: var(--s2); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.chart .line-ion { fill: none; stroke: var(--s3); stroke-width: 1.5; }
+.chart .line-te { fill: none; stroke: var(--s4); stroke-width: 1.5; }
+.chart .line-deriv { fill: none; stroke: var(--s2); stroke-width: 2; stroke-linejoin: round; }
+.chart .win-shade { fill: var(--s4); opacity: 0.07; }
+.chart .ion-shade { fill: var(--s3); opacity: 0.07; }
+.chart .marker-line { stroke: var(--ink-2); stroke-width: 1; stroke-dasharray: 3 3; }
+.chart .marker-text { fill: var(--ink); font-size: 11px; font-weight: 600; }
+.chart .marker-sub { fill: var(--ink-2); font-size: 10.5px; font-family: var(--font-mono); }
+.chart .fit-label { fill: var(--ink-2); font-size: 10.5px; font-family: var(--font-mono); }
+.chart .readout-bg { fill: var(--surface); opacity: 0.86; stroke: var(--border); }
+.chart .readout { fill: var(--ink-2); font-size: 10.5px; font-family: var(--font-mono); }
+.chart .readout.strong { fill: var(--ink); font-weight: 500; }
+.chart .line-telocal { fill: none; stroke: var(--s4); stroke-width: 2; stroke-linejoin: round; }
+.chart .crosshair { stroke: var(--ink-2); stroke-width: 1; opacity: 0; pointer-events: none; }
+.chart .hover-dot { fill: var(--s1); stroke: var(--surface); stroke-width: 2; opacity: 0; pointer-events: none; }
+.chart .hit { fill: transparent; cursor: crosshair; }
+.chart .clip-note { fill: var(--muted); font-size: 11px; }
+.tip {
+  position: absolute; z-index: 5; pointer-events: none; opacity: 0; transition: opacity .1s ease;
+  background: var(--tooltip-bg); color: var(--tooltip-ink); border-radius: 8px; padding: 8px 10px; font-size: 12px; line-height: 1.35;
+  box-shadow: 0 6px 20px -6px rgba(0,0,0,0.4); min-width: 150px;
+}
+.tip.on { opacity: 1; }
+.tip .t-head { font-family: var(--font-mono); font-weight: 500; margin-bottom: 4px; opacity: .85; }
+.tip .t-row { display: flex; justify-content: space-between; gap: 14px; align-items: baseline; }
+.tip .t-row b { font-family: var(--font-mono); font-weight: 500; }
+.tip .t-row span { opacity: .75; display: inline-flex; align-items: center; gap: 6px; }
+.tip .t-row i { display: inline-block; width: 12px; border-top: 2px solid var(--k); }
+figcaption { color: var(--muted); font-size: 12px; margin-top: 6px; }
+
+/* ---------- analysis sidebar ---------- */
+.side { display: grid; gap: 16px; min-width: 0; }
+.panel { padding: 14px 16px; }
+.panel h2 { margin: 0 0 10px; font-size: 13px; font-weight: 600; letter-spacing: 0.02em; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 2px 10px; }
+.panel h2 .sub { font-weight: 400; color: var(--muted); font-size: 12px; }
+.tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.tile { padding: 10px 12px; border-radius: var(--radius-sm); background: var(--surface-2); min-width: 0; }
+.tile .l { font-size: 11px; color: var(--muted); display: flex; justify-content: space-between; gap: 6px; }
+.tile .v { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; margin-top: 2px; white-space: nowrap; }
+.tile .v small { font-size: 12px; font-weight: 500; color: var(--ink-2); margin-left: 3px; }
+.tile .n { font-size: 11px; color: var(--ink-2); margin-top: 3px; font-family: var(--font-mono); line-height: 1.35; overflow-wrap: anywhere; }
+.tile.wide { grid-column: 1 / -1; }
+.tile.dim .v { color: var(--muted); }
+.flag { display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; padding: 2px 7px; border-radius: 999px; background: var(--surface-3); color: var(--ink-2); line-height: 1.3; }
+.flag::before { flex: none; }
+.flag::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--warn); }
+.flag.crit::before { background: var(--crit); }
+.flag.ok::before { background: var(--good); }
+.flags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 10px; }
+.param { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; align-items: center; padding-block: 6px; }
+.param .l { font-size: 12.5px; color: var(--ink-2); }
+.param .v { font-family: var(--font-mono); font-size: 12px; color: var(--ink); text-align: right; font-variant-numeric: tabular-nums; }
+.param .range { grid-column: 1 / -1; }
+.param .row2 { grid-column: 1 / -1; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.param .seg button { padding: 4px 9px; font-size: 12px; }
+.hint { font-size: 11.5px; color: var(--muted); margin: 6px 0 0; line-height: 1.4; }
+.probe { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.probe label { display: grid; gap: 3px; font-size: 11.5px; color: var(--muted); }
+.probe input, .probe select { width: 100%; }
+
+/* ---------- trends ---------- */
+.trends { padding-block: 6px 18px; }
+.trends .head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 6px 16px; margin-bottom: 8px; }
+.trends h2 { margin: 0; font-size: 15px; font-weight: 600; }
+.trends .head p { margin: 0; color: var(--muted); font-size: 12px; }
+.multiples { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.mini { padding: 10px 12px 6px; min-width: 0; }
+.mini .t { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 12px; color: var(--ink-2); margin-bottom: 2px; }
+.mini .t .cur { white-space: nowrap; }
+.mini .t b { color: var(--ink); font-weight: 600; }
+.mini .t .cur { font-family: var(--font-mono); color: var(--ink); }
+.mini .line { fill: none; stroke: var(--s1); stroke-width: 1.5; stroke-linejoin: round; }
+.mini .area { fill: var(--s1); opacity: 0.08; }
+.mini .pt { fill: var(--s1); stroke: var(--surface); stroke-width: 1.5; }
+.mini .pt.dn { fill: var(--surface); stroke: var(--s1); }
+.mini .pt.cur { r: 5; stroke: var(--surface); stroke-width: 2; }
+.mini .cursor { stroke: var(--ink-2); stroke-width: 1; }
+.mini .hit { fill: transparent; cursor: pointer; }
+
+/* ---------- table & method ---------- */
+.tablesec { padding-block: 6px 18px; }
+.tablesec .head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 16px; margin-bottom: 8px; }
+.tablesec h2 { margin: 0; font-size: 15px; font-weight: 600; }
+.btn {
+  padding: 6px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--surface); color: var(--ink); font-size: 12.5px; font-weight: 500;
+}
+.btn:hover { background: var(--surface-2); }
+.tbl-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 12px; }
+th, td { padding: 6px 10px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--grid); font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+th { font-family: var(--font-ui); color: var(--muted); font-weight: 600; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; position: sticky; top: 0; background: var(--surface); }
+th:first-child, td:first-child { text-align: left; }
+tr.cur td { background: var(--accent-soft); }
+tr:hover td { background: var(--surface-2); cursor: pointer; }
+tr.cur:hover td { background: var(--accent-soft); }
+.method { padding-block: 8px 12px; border-top: 1px solid var(--border); }
+.method h2 { font-size: 15px; font-weight: 600; margin: 14px 0 6px; }
+.method .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 8px 28px; }
+.method p, .method li { font-size: 13px; color: var(--ink-2); max-width: 66ch; margin: 4px 0; }
+.method ol { padding-left: 20px; margin: 4px 0; }
+.method b { color: var(--ink); font-weight: 600; }
+.verdict { padding: 12px 14px; border-left: 3px solid var(--accent); background: var(--surface-2); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; margin: 8px 0 14px; max-width: 80ch; }
+.verdict p { margin: 4px 0; font-size: 13px; color: var(--ink); }
+.kbd { font-family: var(--font-mono); font-size: 11px; padding: 1px 5px; border: 1px solid var(--border-strong); border-radius: 4px; background: var(--surface); }
+
+@media (max-width: 980px) {
+  .grid { grid-template-columns: minmax(0, 1fr); }
+  .side { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+  .multiples { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 560px) {
+  .brand h1 { font-size: 19px; }
+  .multiples { grid-template-columns: minmax(0, 1fr); }
+  .tiles { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .tile .v { font-size: 17px; }
+  figure.card { padding: 12px 10px 8px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .play, .range::-webkit-slider-thumb, .tip { transition: none; }
+}
+</style>
+<div class="app" id="app">
+  <header class="masthead">
+    <div class="brand">
+      <h1>Langmuir Sweep Bench</h1>
+      <p><span id="src-name" class="mono">sweep_log.csv</span> · <span id="src-when">—</span> · <span id="src-rows" class="mono">—</span> samples · <span id="src-sweeps" class="mono">—</span> half-sweeps</p>
+    </div>
+    <div class="facts" id="facts"></div>
+  </header>
+
+  <section class="scrubber" aria-label="Sweep selection">
+    <div class="scrub-row">
+      <button class="play" id="play" aria-pressed="false" aria-label="Play through sweeps" title="Play / pause (space)">
+        <svg class="ic-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9-5.5z"/></svg>
+        <svg class="ic-pause" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 2.5h3v11h-3zM9.5 2.5h3v11h-3z"/></svg>
+      </button>
+      <div class="scrub-main">
+        <div class="scrub-labels">
+          <span class="cur" id="sweep-label">Sweep 1</span>
+          <span id="sweep-time" class="mono">t = 0.0 s</span>
+        </div>
+        <input class="range" type="range" id="sweep" min="0" max="80" value="1" step="1" aria-label="Sweep index">
+      </div>
+      <div class="scrub-side">
+        <span class="lab" style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600">Speed</span>
+        <div class="seg" id="speed" role="group" aria-label="Playback speed">
+          <button type="button" data-v="0.5">½×</button>
+          <button type="button" data-v="1" aria-pressed="true">1×</button>
+          <button type="button" data-v="2">2×</button>
+          <button type="button" data-v="4">4×</button>
+        </div>
+        <label class="checks" style="margin-left:4px"><input type="checkbox" id="loop" checked> Loop</label>
+      </div>
+    </div>
+    <div class="strip-wrap" title="Whole log: current vs time. Click to jump to a sweep.">
+      <canvas id="strip" aria-label="Current over the whole log; click to jump to a sweep" role="img"></canvas>
+    </div>
+    <div class="strip-caption"><span id="strip-left">whole log · I vs time</span><span id="strip-right" class="mono"></span></div>
+  </section>
+
+  <div class="filters" role="group" aria-label="Plot options">
+    <div class="ctl"><span class="lab">Channel</span>
+      <div class="seg" id="channel"><button type="button" data-v="I2" aria-pressed="true">I2</button><button type="button" data-v="I1">I1</button></div>
+    </div>
+    <div class="ctl"><span class="lab">Overlay</span>
+      <div class="seg" id="overlay"><button type="button" data-v="single" aria-pressed="true">This sweep</button><button type="button" data-v="pair">Up + down</button><button type="button" data-v="all">All sweeps</button></div>
+    </div>
+    <div class="ctl"><span class="lab">Y</span>
+      <div class="seg" id="yscale"><button type="button" data-v="lin" aria-pressed="true">Linear</button><button type="button" data-v="log">Log |I|</button></div>
+    </div>
+    <div class="ctl"><span class="lab">Quantity</span>
+      <div class="seg" id="quantity"><button type="button" data-v="I" aria-pressed="true">Measured I</button><button type="button" data-v="Ie">Electron Ie = I − I<sub>ion</sub></button></div>
+    </div>
+    <div class="ctl"><span class="lab">Layers</span>
+      <div class="checks">
+        <label><input type="checkbox" id="ly-points" checked><i class="key dot" style="--k:var(--s1)"></i> Samples</label>
+        <label><input type="checkbox" id="ly-smooth" checked><i class="key" style="--k:var(--s1)"></i> Smoothed</label>
+        <label><input type="checkbox" id="ly-fits" checked><i class="key" style="--k:var(--s3)"></i> Fits &amp; markers</label>
+        <label><input type="checkbox" id="ly-deriv" checked><i class="key" style="--k:var(--s2)"></i> Lower panel</label>
+      </div>
+      <div class="seg" id="lower"><button type="button" data-v="deriv" aria-pressed="true">dI/dV</button><button type="button" data-v="telocal">Local T<sub>e</sub>(V)</button></div>
+    </div>
+    <div class="ctl"><span class="lab">Baseline</span>
+      <div class="seg" id="baseline"><button type="button" data-v="ref" aria-pressed="true">Plasma-off fit</button><button type="button" data-v="const">Constant</button><button type="button" data-v="none">None</button></div>
+      <span class="ctl" id="base-ref-wrap"><span class="lab">sweeps</span><input class="num" type="number" id="base-from" min="1" max="81" step="1" value="75" aria-label="First plasma-off reference sweep" style="width:64px"><span class="lab">to</span><input class="num" type="number" id="base-to" min="1" max="81" step="1" value="80" aria-label="Last plasma-off reference sweep" style="width:64px"><span class="lab mono" id="base-fit" style="text-transform:none;letter-spacing:0"></span></span>
+      <span class="ctl" id="base-const-wrap" hidden><input class="num" type="number" id="base-const" step="1" value="148" aria-label="Constant offset in nanoamps"><span class="lab">nA</span></span>
+    </div>
+  </div>
+
+  <main class="grid">
+    <figure class="card" id="iv-fig">
+      <div class="fig-head">
+        <h2 id="iv-title">I–V characteristic</h2>
+        <div class="legend" id="iv-legend">
+          <span><i class="dot" style="--k:var(--s1)"></i>samples</span>
+          <span><i style="--k:var(--s1)"></i>smoothed</span>
+          <span id="lg-pair" hidden><i style="--k:var(--s2)"></i>partner sweep</span>
+          <span id="lg-ghost" hidden><i class="ghost"></i>other sweeps</span>
+          <span id="lg-excl" hidden><i class="dot ghost" style="--k:var(--ghost)"></i>excluded (overrange)</span>
+          <span><i style="--k:var(--s3)"></i>ion-saturation fit</span>
+          <span><i style="--k:var(--s4)"></i>exp(V/T<sub>e</sub>) fit</span>
+        </div>
+      </div>
+      <div class="chart" id="iv-chart">
+        <canvas id="iv-canvas"></canvas>
+        <svg id="iv-svg" role="img" aria-labelledby="iv-title"></svg>
+        <div class="tip" id="iv-tip"></div>
+      </div>
+      <figcaption id="iv-caption">Probe bias V<sub>2</sub> on the x-axis, collected current on the y-axis (electron collection positive). Hover for values; drag the sweep slider or press <span class="kbd">←</span> <span class="kbd">→</span>.</figcaption>
+    </figure>
+
+    <aside class="side">
+      <section class="card panel" aria-labelledby="an-title">
+        <h2 id="an-title">Sweep analysis <span class="sub" id="an-sub">sweep 1</span></h2>
+        <div class="tiles" id="tiles"></div>
+        <div class="flags" id="flags"></div>
+      </section>
+
+      <section class="card panel" aria-labelledby="pr-title">
+        <h2 id="pr-title">Fit parameters</h2>
+        <div class="param">
+          <span class="l">Smoothing window</span><span class="v" id="v-window">31 pts</span>
+          <input class="range small" type="range" id="p-window" min="5" max="121" step="2" value="31" aria-label="Smoothing window in points">
+        </div>
+        <div class="param">
+          <span class="l">Ion-saturation region (from V<sub>min</sub>)</span><span class="v" id="v-fion">20 %</span>
+          <input class="range small" type="range" id="p-fion" min="0.05" max="0.5" step="0.01" value="0.2" aria-label="Fraction of the sweep used for the ion-saturation fit">
+        </div>
+        <div class="param">
+          <span class="l">T<sub>e</sub> fit window</span>
+          <div class="seg" id="tewin"><button type="button" data-v="auto" aria-pressed="true">Auto</button><button type="button" data-v="manual">Manual</button></div>
+          <div class="row2" id="tewin-auto">
+            <span class="l" style="flex:1">I<sub>e</sub> between</span><span class="v" id="v-telo">2 %</span>
+            <input class="range small" type="range" id="p-telo" min="0.01" max="0.5" step="0.01" value="0.02" aria-label="Lower electron-current fraction of the Te window" style="width:100%">
+            <span class="l" style="flex:1">and</span><span class="v" id="v-tehi">30 %</span>
+            <input class="range small" type="range" id="p-tehi" min="0.05" max="1" step="0.01" value="0.3" aria-label="Upper electron-current fraction of the Te window" style="width:100%">
+          </div>
+          <div class="row2" id="tewin-manual" hidden>
+            <span class="l" style="flex:1">from</span><span class="v" id="v-vlo">−4.0 V</span>
+            <input class="range small" type="range" id="p-vlo" min="-10" max="10" step="0.1" value="-4" aria-label="Lower voltage of the Te window" style="width:100%">
+            <span class="l" style="flex:1">to</span><span class="v" id="v-vhi">2.0 V</span>
+            <input class="range small" type="range" id="p-vhi" min="-10" max="10" step="0.1" value="2" aria-label="Upper voltage of the Te window" style="width:100%">
+          </div>
+        </div>
+        <p class="hint">Auto takes the contiguous run just above V<sub>f</sub> where the electron current lies between the two fractions of its value at the knee (or at +10 V when no knee is found). The upper and lower halves are also fitted separately to show how far from a single exponential the branch is.</p>
+      </section>
+
+      <section class="card panel" aria-labelledby="pb-title">
+        <h2 id="pb-title">Probe &amp; gas <span class="sub">for densities</span></h2>
+        <div class="probe">
+          <label>Probe area (mm²)<input class="num" type="number" id="p-area" min="0.001" step="0.1" value="10"></label>
+          <label>Working gas
+            <select class="sel" id="p-gas">
+              <option value="39.948" selected>Argon (39.95 u)</option>
+              <option value="4.0026">Helium (4.00 u)</option>
+              <option value="20.180">Neon (20.18 u)</option>
+              <option value="83.798">Krypton (83.80 u)</option>
+              <option value="131.29">Xenon (131.3 u)</option>
+              <option value="28.014">N₂ (28.01 u)</option>
+              <option value="31.998">O₂ (32.00 u)</option>
+              <option value="2.016">H₂ (2.02 u)</option>
+              <option value="custom">Custom…</option>
+            </select>
+          </label>
+          <label id="p-mass-wrap" hidden>Ion mass (u)<input class="num" type="number" id="p-mass" min="0.5" step="0.01" value="39.948"></label>
+        </div>
+        <p class="hint">Densities use the electron thermal flux (n<sub>e</sub>) and the Bohm ion flux with the 0.61 presheath factor (n<sub>i</sub>). Set the real collecting area of your tip.</p>
+      </section>
+    </aside>
+  </main>
+
+  <section class="trends" aria-labelledby="tr-title">
+    <div class="head"><h2 id="tr-title">Sweep-to-sweep trends</h2><p>One point per half-sweep. Filled dots are up-sweeps (−10 → +10 V), hollow are down-sweeps. Sweeps without a plasma signal are left blank. Click a point to jump to it.</p></div>
+    <div class="multiples" id="multiples"></div>
+  </section>
+
+  <section class="tablesec" aria-labelledby="tb-title">
+    <div class="head">
+      <h2 id="tb-title">Results table</h2>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn" id="tbl-toggle" aria-expanded="false" aria-controls="tbl-wrap">Show table</button>
+        <button class="btn" id="tbl-copy" hidden>Copy as CSV</button>
+      </div>
+    </div>
+    <div class="tbl-wrap" id="tbl-wrap" hidden><table id="tbl"><thead></thead><tbody></tbody></table></div>
+  </section>
+
+  <section class="method" aria-labelledby="me-title">
+    <h2 id="me-title">About this dataset</h2>
+    <div class="verdict" id="verdict">
+      <p><b>What the log shows.</b> A ±10 V triangle sweep (1.12 V/s, 17.9 s per half-sweep) on a small probe in a tenuous plasma whose density stepped through several levels over 24 minutes. The current channel carries an instrument offset of about 148 nA plus a ≈1.7 nA/V leakage ramp (≈600 MΩ); both are visible directly in the last seven sweeps (75–81), where the plasma is off, and they are removed by the default “plasma-off fit” baseline.</p>
+      <p><b>What that means for the numbers.</b> After the baseline, plasma sweeps show a floating potential of −2.5 to −4.8 V, an ion current of only 10–75 nA at −9.5 V that is still growing with |V| (no flat ion saturation), and an electron current that keeps rising all the way to +10 V. No sweep reaches a knee, so the plasma potential lies above +10 V (sheath theory puts it near 11–13 V) and electron saturation is never seen: n<sub>e</sub> is a lower bound and T<sub>e</sub> is an effective slope temperature over the fit window. The electron branch is not a single exponential: the local slope temperature rises from about 1 eV just above V<sub>f</sub> to about 6 eV near +8 V (switch the lower panel to “Local T<sub>e</sub>(V)” to see it). Up- and down-sweeps are offset by 0.4–1 V of hysteresis. Two episodes (sweeps 9–10 and 59–60) are over-range transients where the ADC wrapped from +2.9 µA to −2.1 µA; those samples are excluded from every fit and drawn in grey. With Debye lengths of several millimetres the probe is in the orbital-motion-limited regime, so the planar saturation-current formulas are approximations.</p>
+    </div>
+    <h2>How each number is computed</h2>
+    <div class="cols">
+      <div>
+        <ol>
+          <li><b>Half-sweeps</b> are cut wherever the DAC ramp reverses direction (0 ↔ 65535); each is 1457 samples, 17.9 s.</li>
+          <li><b>Over-range screening</b> drops samples where I2 is below −50 nA or jumps by more than 1 µA between neighbours (the ADC wrap-around), before anything else.</li>
+          <li><b>Baseline</b>: a straight line fitted to the plasma-off sweeps (default 75–80) is subtracted; a constant or no baseline are also available.</li>
+          <li><b>Smoothing</b> is a centred moving average over the chosen window; <b>dI/dV</b> is the least-squares slope over the same window. The residual scatter gives the noise σ<sub>I</sub>.</li>
+          <li><b>Signal gate</b>: a sweep needs a current span above 10 σ<sub>I</sub> and a slope above 6 σ<sub>b</sub> to be analysed; otherwise it is reported as “no plasma signal”. Partial sweeps (not reaching ±8 V) are shown but not analysed.</li>
+          <li><b>Ion-saturation fit</b>: a straight line through the most negative part of the sweep (the chosen fraction). Its extrapolation I<sub>ion</sub>(V) is subtracted to give the electron current I<sub>e</sub>. <b>I<sub>is</sub></b> is the mean current over the lowest 1 V; the fit extrapolated to V<sub>f</sub> is shown as a secondary value.</li>
+        </ol>
+      </div>
+      <div>
+        <ol start="7">
+          <li><b>V<sub>f</sub></b> (floating potential): where the smoothed current crosses zero, with an uncertainty σ<sub>I</sub>/(dI/dV). Multiple crossings are resolved by a local line fit and flagged.</li>
+          <li><b>V<sub>p</sub></b> (plasma potential): the maximum of dI/dV, accepted only when it lies at least 1 V inside the sweep and the slope falls to 70 % of the peak beyond it. Otherwise the knee is beyond +10 V and the sheath estimate V<sub>f</sub> + T<sub>e</sub> ln(√(m<sub>i</sub>/2πm<sub>e</sub>)/0.61) is shown instead.</li>
+          <li><b>T<sub>e</sub></b>: slope of ln I<sub>e</sub> vs V over the transition window, T<sub>e</sub> = 1/slope in eV, with R². The window's lower and upper halves are fitted separately; a ratio above 1.3 flags a non-exponential branch.</li>
+          <li><b>I<sub>es</sub></b>: electron current at V<sub>p</sub>, or at +10 V as a lower bound when no knee is found.</li>
+          <li><b>n<sub>e</sub></b> = I<sub>es</sub> / (e A √(eT<sub>e</sub>/2πm<sub>e</sub>)); <b>n<sub>i</sub></b> = |I<sub>is</sub>| / (0.61 e A √(eT<sub>e</sub>/m<sub>i</sub>)); <b>λ<sub>D</sub></b> = √(ε₀T<sub>e</sub>/n<sub>e</sub>e). Both densities scale as 1/A, so set the real collecting area.</li>
+          <li><b>Hysteresis</b>: the voltage shift that best aligns the down-sweep onto its up-sweep partner over −5 … +9 V.</li>
+        </ol>
+      </div>
+    </div>
+    <p style="margin-top:10px">Channels: <b>I2</b> is the main current channel (0.15 nA steps); <b>I1</b> carries the same current with coarser 0.9 nA steps and reads NaN above ≈1.7 µA, where it is dropped. <b>V1</b> in the log is an attenuated monitor of the bias (V1 ≈ −0.166·V2 + 0.17) and is not plotted. Keyboard: <span class="kbd">←</span> <span class="kbd">→</span> step sweeps, <span class="kbd">space</span> plays.</p>
+  </section>
+</div>
