@@ -1,0 +1,709 @@
+<title>Probe I–V Viewer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one column bench tool. The control row scopes the stats, the three stacked panels (shared voltage axis) and the table. */
+:root {
+  --bg: #f3f3f0;
+  --surface: #fcfcfb;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --grid: #e1e0d9;
+  --baseline: #c3c2b7;
+  --hair: rgba(11, 11, 11, 0.10);
+  --line-strong: rgba(11, 11, 11, 0.28);
+  --wash: rgba(11, 11, 11, 0.05);
+  --series: #2a78d6;
+  --mark: #eb6834;
+  --sel: rgba(42, 120, 214, 0.12);
+  --font-sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121211;
+    --surface: #1a1a19;
+    --ink: #ffffff;
+    --ink-2: #c3c2b7;
+    --grid: #2c2c2a;
+    --baseline: #383835;
+    --hair: rgba(255, 255, 255, 0.10);
+    --line-strong: rgba(255, 255, 255, 0.28);
+    --wash: rgba(255, 255, 255, 0.06);
+    --series: #3987e5;
+    --mark: #d95926;
+    --sel: rgba(57, 135, 229, 0.18);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121211;
+  --surface: #1a1a19;
+  --ink: #ffffff;
+  --ink-2: #c3c2b7;
+  --grid: #2c2c2a;
+  --baseline: #383835;
+  --hair: rgba(255, 255, 255, 0.10);
+  --line-strong: rgba(255, 255, 255, 0.28);
+  --wash: rgba(255, 255, 255, 0.06);
+  --series: #3987e5;
+  --mark: #d95926;
+  --sel: rgba(57, 135, 229, 0.18);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 14px/1.5 var(--font-sans);
+}
+.app {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding-inline: 16px;
+  padding-block: 24px 40px;
+  display: grid;
+  gap: 16px;
+}
+
+.eyebrow { font: 500 12px/1.4 var(--font-mono); letter-spacing: 0.02em; color: var(--ink-2); overflow-wrap: anywhere; } /* no uppercase: file names carry unit prefixes (u = micro) */
+h1 { margin: 4px 0 0; font-size: 24px; line-height: 1.2; font-weight: 600; letter-spacing: -0.01em; text-wrap: balance; }
+.sub { margin: 4px 0 0; color: var(--ink-2); max-width: 70ch; }
+
+/* Controls */
+.controls { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: end; }
+.group { display: grid; gap: 4px; min-width: 0; }
+.group > .lbl { font: 500 12px/1.4 var(--font-mono); letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink-2); }
+.row { display: flex; gap: 8px; align-items: center; min-width: 0; }
+.sweep-group { flex: 1 1 320px; }
+button, select, input[type="number"] {
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  height: 36px;
+  padding: 0 12px;
+}
+button { cursor: pointer; white-space: nowrap; }
+button:hover:not(:disabled) { background: var(--wash); }
+button:disabled { opacity: 0.45; cursor: default; }
+select { min-width: 0; width: 100%; text-overflow: ellipsis; font-family: var(--font-mono); font-size: 13px; }
+input[type="number"] { width: 6.5em; padding: 0 8px; font-family: var(--font-mono); font-size: 13px; font-variant-numeric: tabular-nums; }
+input[type="range"] { width: 180px; max-width: 100%; margin: 0; accent-color: var(--series); }
+output { font: 13px var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.unit { color: var(--ink-2); font-size: 13px; }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--series); outline-offset: 2px; }
+
+/* Summary */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px 24px; }
+.stat { min-width: 0; }
+.stat .k { font: 500 12px/1.4 var(--font-mono); letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink-2); }
+.stat .v { font: 500 17px/1.35 var(--font-mono); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.stat .s { font-size: 12px; color: var(--ink-2); }
+
+/* Cards */
+.card { background: var(--surface); border: 1px solid var(--hair); border-radius: 10px; padding: 16px; min-width: 0; }
+.card-head { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+h2 { margin: 0; font-size: 15px; font-weight: 600; }
+.note { font-size: 12px; color: var(--ink-2); }
+
+/* Chart */
+.chart-wrap { position: relative; }
+#chart { display: block; width: 100%; height: auto; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
+#chart:focus-visible { outline: 2px solid var(--series); outline-offset: 2px; border-radius: 4px; }
+.grid { stroke: var(--grid); stroke-width: 1; }
+.zero, .axis { stroke: var(--baseline); stroke-width: 1; }
+.tick { fill: var(--ink-2); font: 11px var(--font-mono); font-variant-numeric: tabular-nums; }
+.ptitle { fill: var(--ink); font: 500 12px var(--font-sans); }
+.axis-title { fill: var(--ink-2); font: 12px var(--font-sans); }
+.line { fill: none; stroke: var(--series); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.dot { fill: var(--series); stroke: var(--surface); stroke-width: 2; }
+.limit { fill: var(--surface); stroke: var(--series); stroke-width: 2; }
+.off { fill: var(--series); }
+.ref { stroke: var(--ink-2); stroke-width: 1; }
+.ref-label { fill: var(--ink-2); font: 11px var(--font-mono); }
+.cross { fill: var(--surface); stroke: var(--mark); stroke-width: 2; }
+.sel { fill: var(--sel); stroke: var(--series); stroke-width: 1; }
+.xh-line { stroke: var(--ink-2); stroke-width: 1; }
+.xh-dot { fill: var(--series); stroke: var(--surface); stroke-width: 2; }
+
+.tip {
+  position: absolute;
+  pointer-events: none;
+  min-width: 190px;
+  padding: 8px 10px;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.14);
+  font-size: 12px;
+}
+.tip-head { margin-bottom: 4px; font: 11px var(--font-mono); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.tip-row { display: flex; justify-content: space-between; gap: 16px; align-items: baseline; }
+.tip-k { color: var(--ink-2); }
+.tip-v { font: 500 13px var(--font-mono); font-variant-numeric: tabular-nums; color: var(--ink); }
+.keyline { display: inline-block; width: 12px; height: 2px; margin-right: 6px; vertical-align: middle; background: var(--series); border-radius: 1px; }
+.tip-note { margin-top: 4px; font-size: 11px; color: var(--ink-2); }
+
+.readout { margin: 8px 0 0; font: 13px/1.5 var(--font-mono); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.key { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 8px; font-size: 12px; color: var(--ink-2); }
+.key span { display: inline-flex; gap: 6px; align-items: center; }
+.key svg { display: block; flex: none; }
+
+/* Method */
+.method { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.method h3 { margin: 0 0 2px; font-size: 13px; font-weight: 600; }
+.method p { margin: 0; color: var(--ink-2); font-size: 13px; max-width: 65ch; }
+
+/* Table */
+.table-wrap { max-height: 360px; overflow: auto; border: 1px solid var(--hair); border-radius: 8px; margin-top: 8px; }
+table { width: 100%; border-collapse: collapse; font: 12px var(--font-mono); font-variant-numeric: tabular-nums; }
+th, td { padding: 6px 12px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--hair); }
+th { position: sticky; top: 0; background: var(--surface); color: var(--ink-2); font-weight: 500; }
+th:first-child, td:first-child, th:last-child, td:last-child { text-align: left; }
+
+.foot { margin: 0; max-width: 70ch; font-size: 12px; color: var(--ink-2); }
+
+@media (max-width: 520px) {
+  .card { padding: 12px; }
+  .stat .v { font-size: 15px; }
+  input[type="range"] { width: 140px; }
+}
+</style>
+<!--BODY-->
+<div class="app">
+  <header>
+    <div class="eyebrow" id="eyebrow"></div>
+    <h1>Probe I–V viewer</h1>
+    <p class="sub">Source current against measured probe voltage, with the first and second derivatives used to look for the plasma potential.</p>
+  </header>
+
+  <section class="controls" aria-label="View settings">
+    <div class="group sweep-group" id="sweep-group">
+      <span class="lbl">Sweep</span>
+      <div class="row">
+        <button id="prev" type="button" aria-label="Previous sweep">&lsaquo;</button>
+        <select id="pick" aria-label="Sweep"></select>
+        <button id="next" type="button" aria-label="Next sweep">&rsaquo;</button>
+      </div>
+    </div>
+    <div class="group">
+      <label class="lbl" for="win">Smoothing window</label>
+      <div class="row"><input id="win" type="range" min="3" max="21" step="2" value="5"><output id="win-out" for="win"></output></div>
+    </div>
+    <div class="group">
+      <span class="lbl">Voltage range</span>
+      <div class="row">
+        <input id="x0" type="number" step="any" aria-label="From voltage">
+        <span class="unit">to</span>
+        <input id="x1" type="number" step="any" aria-label="To voltage">
+        <span class="unit">V</span>
+        <button id="reset" type="button">Full sweep</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="stats" aria-label="Sweep summary">
+    <div class="stat"><div class="k">Floating potential</div><div class="v" id="st-vf"></div><div class="s" id="st-vf-s"></div></div>
+    <div class="stat"><div class="k">Source current</div><div class="v" id="st-i"></div><div class="s" id="st-i-s"></div></div>
+    <div class="stat"><div class="k">Measured voltage</div><div class="v" id="st-v"></div><div class="s" id="st-v-s"></div></div>
+    <div class="stat"><div class="k">Largest voltage gap</div><div class="v" id="st-gap"></div><div class="s" id="st-gap-s"></div></div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <h2 id="chart-title"></h2>
+      <span class="note">Axes fit to the readings in view. Drag across the chart to zoom; double-click to reset.</span>
+    </div>
+    <div class="chart-wrap" id="wrap">
+      <svg id="chart" tabindex="0" role="group"></svg>
+      <div class="tip" id="tip" hidden>
+        <div class="tip-head" id="tip-head"></div>
+        <div class="tip-row"><span class="tip-k">V</span><span class="tip-v" id="tip-v"></span></div>
+        <div class="tip-row"><span class="tip-k"><i class="keyline"></i>I</span><span class="tip-v" id="tip-i"></span></div>
+        <div class="tip-row"><span class="tip-k">dI/dV</span><span class="tip-v" id="tip-d1"></span></div>
+        <div class="tip-row"><span class="tip-k">d²I/dV²</span><span class="tip-v" id="tip-d2"></span></div>
+        <div class="tip-note" id="tip-note" hidden>At the source limit; left out of the derivatives.</div>
+      </div>
+    </div>
+    <p class="readout" id="readout"></p>
+    <div class="key">
+      <span><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="4.5" style="fill:var(--surface);stroke:var(--mark);stroke-width:2"/></svg>d²I/dV² crosses zero, + to −</span>
+      <span><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><line x1="7" y1="1" x2="7" y2="13" style="stroke:var(--ink-2);stroke-width:1"/></svg>Floating potential, I = 0</span>
+      <span><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="4.5" style="fill:var(--surface);stroke:var(--series);stroke-width:2"/></svg>Reading at the source limit</span>
+      <span><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 10 L11 10 L7 3 Z" style="fill:var(--series)"/></svg>Off the scale (axis ignores the extreme 2%)</span>
+    </div>
+  </section>
+
+  <section class="card method" aria-label="Method">
+    <div>
+      <h3>Reading the plasma potential</h3>
+      <p>The plasma potential sits at the knee of the I–V curve, where the electron current stops rising exponentially. There dI/dV peaks and d²I/dV² crosses zero going from positive to negative. A crossing that moves or disappears when you change the smoothing is noise. If dI/dV climbs to a plateau without peaking, the sweep has no clear knee to read.</p>
+    </div>
+    <div>
+      <h3>How the derivatives are computed</h3>
+      <p>The source steps current in even increments, so V(I) is fitted with a quadratic over the smoothing window around each reading. The slopes are then inverted: dI/dV = 1 / (dV/dI) and d²I/dV² = −(d²V/dI²) / (dV/dI)³. A 3-point window passes exactly through neighbouring readings, so it applies no smoothing. Readings flagged at the source limit are left out.</p>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <h2>Readings</h2>
+      <button id="tbl-toggle" type="button" aria-expanded="false" aria-controls="tbl-wrap">Show table</button>
+    </div>
+    <div class="table-wrap" id="tbl-wrap" hidden>
+      <table>
+        <thead><tr><th scope="col">#</th><th scope="col">V (V)</th><th scope="col">I (&micro;A)</th><th scope="col">dI/dV (&micro;A/V)</th><th scope="col">d²I/dV² (&micro;A/V²)</th><th scope="col">Note</th></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <p class="foot" id="foot"></p>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var D = __PROBE_DATA__;
+  var sweeps = D.sweeps, N = sweeps.length;
+  var MINUS = "−";
+  var $ = function (id) { return document.getElementById(id); };
+
+  function fmt(x, d) {
+    if (!isFinite(x)) return "—";
+    var s = x.toFixed(d);
+    if (Number(s) === 0) s = (0).toFixed(d);
+    return s.replace("-", MINUS);
+  }
+  function fmtSig(x, p) {
+    if (!isFinite(x)) return "—";
+    var s = x === 0 || Math.abs(x) >= 1e-4 ? String(Number(x.toPrecision(p))) : x.toExponential(p - 1);
+    return s.replace("-", MINUS);
+  }
+  function median(a) { var b = a.slice().sort(function (p, q) { return p - q; }), m = b.length >> 1; return b.length % 2 ? b[m] : (b[m - 1] + b[m]) / 2; }
+
+  // Per-sweep facts that don't depend on the view or smoothing
+  sweeps.forEach(function (s) {
+    var i;
+    s.n = s.v.length;
+    s.ok = [];
+    for (i = 0; i < s.n; i++) if (!s.lim[i]) s.ok.push(i);
+    s.nLim = s.n - s.ok.length;
+    s.vmin = Math.min.apply(null, s.v); s.vmax = Math.max.apply(null, s.v);
+    s.imin = Math.min.apply(null, s.i); s.imax = Math.max.apply(null, s.i);
+    s.vf = null;
+    for (i = 0; i + 1 < s.n; i++) {
+      if (s.i[i] < 0 && s.i[i + 1] >= 0) {
+        s.vf = s.v[i] + (0 - s.i[i]) * (s.v[i + 1] - s.v[i]) / (s.i[i + 1] - s.i[i]);
+        s.vfAt = i;
+        break;
+      }
+    }
+    var steps = [];
+    for (i = 1; i < s.n; i++) steps.push(s.i[i] - s.i[i - 1]);
+    s.step = steps.length ? median(steps) : 0;
+    var vs = s.v.slice().sort(function (p, q) { return p - q; });
+    s.gap = 0;
+    for (i = 1; i < vs.length; i++) if (vs[i] - vs[i - 1] > s.gap) { s.gap = vs[i] - vs[i - 1]; s.gapLo = vs[i - 1]; s.gapHi = vs[i]; }
+  });
+
+  // Local quadratic fit of V(I), then invert: dI/dV = 1/V', d2I/dV2 = -V''/V'^3
+  function solve3(S, T) {
+    var A = [[S[0], S[1], S[2], T[0]], [S[1], S[2], S[3], T[1]], [S[2], S[3], S[4], T[2]]];
+    for (var c = 0; c < 3; c++) {
+      var piv = c;
+      for (var r = c + 1; r < 3; r++) if (Math.abs(A[r][c]) > Math.abs(A[piv][c])) piv = r;
+      if (Math.abs(A[piv][c]) < 1e-12) return null;
+      var tmp = A[c]; A[c] = A[piv]; A[piv] = tmp;
+      for (r = 0; r < 3; r++) {
+        if (r === c) continue;
+        var f = A[r][c] / A[c][c];
+        for (var k = c; k < 4; k++) A[r][k] -= f * A[c][k];
+      }
+    }
+    return [A[0][3] / A[0][0], A[1][3] / A[1][1], A[2][3] / A[2][2]];
+  }
+  function derivs(s, win) {
+    var ok = s.ok, m = ok.length, d1 = [], d2 = [];
+    for (var i = 0; i < s.n; i++) { d1.push(NaN); d2.push(NaN); }
+    if (m < 3) return { d1: d1, d2: d2, win: 0 };
+    win = Math.min(win, m % 2 ? m : m - 1);
+    var h = (win - 1) / 2;
+    for (var p = 0; p < m; p++) {
+      var a = Math.max(0, Math.min(p - h, m - win)), i0 = ok[p], S = [0, 0, 0, 0, 0], T = [0, 0, 0];
+      for (var q = a; q < a + win; q++) {
+        var j = ok[q], t = s.i[j] - s.i[i0], y = s.v[j], tk = 1;
+        for (var k = 0; k < 5; k++) { S[k] += tk; if (k < 3) T[k] += y * tk; tk *= t; }
+      }
+      var c = solve3(S, T);
+      if (!c || c[1] === 0) continue;
+      d1[i0] = 1 / c[1];
+      d2[i0] = -2 * c[2] / (c[1] * c[1] * c[1]);
+    }
+    return { d1: d1, d2: d2, win: win };
+  }
+  function crossings(s, d2) {
+    var out = [];
+    for (var p = 0; p + 1 < s.ok.length; p++) {
+      var a = s.ok[p], b = s.ok[p + 1], ya = d2[a], yb = d2[b];
+      if (ya > 0 && yb <= 0) out.push(s.v[a] + (s.v[b] - s.v[a]) * ya / (ya - yb));
+    }
+    return out;
+  }
+
+  // Scales
+  function niceStep(span, target) {
+    var raw = span / target, p = Math.pow(10, Math.floor(Math.log10(raw))), e = raw / p;
+    return p * (e < 1.5 ? 1 : e < 3.5 ? 2 : e < 7.5 ? 5 : 10);
+  }
+  function decimals(step) {
+    for (var d = 0; d < 10; d++) { var m = step * Math.pow(10, d); if (Math.abs(m - Math.round(m)) < 1e-6 * Math.max(1, m)) return d; }
+    return 10;
+  }
+  function niceDomain(lo, hi, target, padFrac) {
+    var lo0 = lo, hi0 = hi, span = hi - lo;
+    if (!(span > 0)) { var p = Math.abs(hi) * 0.1 || 1; lo -= p; hi += p; span = hi - lo; }
+    lo -= span * padFrac; hi += span * padFrac;
+    if (lo0 >= 0 && lo < 0) lo = 0;
+    if (hi0 <= 0 && hi > 0) hi = 0;
+    var step = niceStep(hi - lo, target);
+    return { lo: Math.floor(lo / step + 1e-9) * step, hi: Math.ceil(hi / step - 1e-9) * step, step: step };
+  }
+  function ticksIn(lo, hi, step) {
+    var out = [];
+    for (var k = Math.ceil(lo / step - 1e-9); k <= Math.floor(hi / step + 1e-9); k++) out.push(k * step);
+    return out;
+  }
+  function robustExtent(vals) {
+    var v = vals.filter(isFinite).sort(function (a, b) { return a - b; }), n = v.length;
+    if (!n) return [0, 1];
+    var lo = n >= 25 ? v[Math.floor(0.02 * (n - 1))] : v[0];
+    var hi = n >= 25 ? v[Math.ceil(0.98 * (n - 1))] : v[n - 1];
+    return [Math.min(0, lo), Math.max(0, hi)];
+  }
+
+  // State
+  var pick = $("pick"), prev = $("prev"), next = $("next"), winIn = $("win"), winOut = $("win-out");
+  var x0In = $("x0"), x1In = $("x1"), svg = $("chart"), wrap = $("wrap"), tip = $("tip");
+  var tblWrap = $("tbl-wrap"), tblBtn = $("tbl-toggle");
+  var cur = 0, win = Number(winIn.value), view = null, der = null, G = null, cursor = null, lastW = 0, drag = null;
+
+  if (N > 1) {
+    sweeps.forEach(function (s, k) {
+      var o = document.createElement("option");
+      o.value = String(k);
+      o.textContent = (k + 1) + " · " + s.name + " · " + s.n + " readings";
+      pick.appendChild(o);
+    });
+  } else {
+    $("sweep-group").hidden = true;
+  }
+
+  function renderHeader() {
+    var s = sweeps[cur];
+    $("eyebrow").textContent = s.name + " · " + s.start;
+    $("chart-title").textContent = N > 1 ? "Sweep " + (cur + 1) + " of " + N : "I–V characteristic and derivatives";
+    $("st-vf").textContent = s.vf == null ? "Not crossed" : fmt(s.vf, 1) + " V";
+    $("st-vf-s").textContent = s.vf == null ? "Current never changes sign" : "I = 0, between readings " + (s.vfAt + 1) + " and " + (s.vfAt + 2);
+    $("st-i").textContent = fmt(s.imin, 2) + " to " + fmt(s.imax, 2) + " µA";
+    $("st-i-s").textContent = fmtSig(s.step, 3) + " µA steps · " + s.n + " readings";
+    $("st-v").textContent = fmt(s.vmin, 1) + " to " + fmt(s.vmax, 1) + " V";
+    $("st-v-s").textContent = s.nLim ? s.nLim + (s.nLim === 1 ? " reading" : " readings") + " at the source limit" : "No readings at the source limit";
+    $("st-gap").textContent = fmt(s.gap, 1) + " V";
+    $("st-gap-s").textContent = "No readings between " + fmt(s.gapLo, 1) + " and " + fmt(s.gapHi, 1) + " V";
+    $("foot").textContent = "Source file: " + s.name + ". Voltage is the measured Reading (Volt DC); current is the sourced Value (Amp DC), shown in µA. Time span " +
+      fmt(s.t[s.n - 1] - s.t[0], 2) + " s.";
+  }
+
+  function render() {
+    var s = sweeps[cur];
+    var W = Math.max(280, Math.floor(wrap.clientWidth));
+    lastW = wrap.clientWidth;
+    var small = W < 560, xTarget = small ? 5 : 8;
+    var x0, x1;
+    if (view) { x0 = view[0]; x1 = view[1]; }
+    else { var nd = niceDomain(s.vmin, s.vmax, xTarget, 0); x0 = nd.lo; x1 = nd.hi; }
+    if (document.activeElement !== x0In) x0In.value = String(Number(x0.toFixed(2)));
+    if (document.activeElement !== x1In) x1In.value = String(Number(x1.toFixed(2)));
+    var xStep = niceStep(x1 - x0, xTarget), xTicks = ticksIn(x0, x1, xStep), xDec = decimals(xStep);
+
+    var vis = [];
+    for (var i = 0; i < s.n; i++) if (s.v[i] >= x0 && s.v[i] <= x1) vis.push(i);
+    var visOk = vis.filter(function (j) { return !s.lim[j]; });
+
+    var hIv = Math.round(Math.min(250, Math.max(170, W * 0.3)));
+    var hD = Math.round(Math.min(170, Math.max(120, W * 0.2)));
+    var panels = [
+      { title: "Current, I (µA)", vals: s.i, idx: s.ok, h: hIv, robust: false },
+      { title: "dI/dV (µA/V)", vals: der.d1, idx: s.ok, h: hD, robust: true },
+      { title: "d²I/dV² (µA/V²)", vals: der.d2, idx: s.ok, h: hD, robust: true }
+    ];
+    var maxLen = 0;
+    panels.forEach(function (P, k) {
+      var vals = (k === 0 ? vis : visOk).map(function (j) { return P.vals[j]; }).filter(isFinite);
+      var yTarget = P.h < 160 ? 4 : 6, ext;
+      if (P.robust) ext = robustExtent(vals);
+      else ext = vals.length ? [Math.min.apply(null, vals), Math.max.apply(null, vals)] : [0, 1];
+      P.yd = niceDomain(ext[0], ext[1], yTarget, P.robust ? 0.08 : 0.06);
+      P.ticks = ticksIn(P.yd.lo, P.yd.hi, P.yd.step);
+      P.dec = decimals(P.yd.step);
+      P.ticks.forEach(function (t) { maxLen = Math.max(maxLen, fmt(t, P.dec).length); });
+    });
+    var M = { l: Math.ceil(maxLen * 6.7) + 14, r: small ? 12 : 20 };
+    var iw = W - M.l - M.r;
+    var y = 4;
+    panels.forEach(function (P) { P.titleY = y + 12; P.top = y + 22; P.bottom = P.top + P.h; y = P.bottom + 16; });
+    var last = panels[panels.length - 1], H = last.bottom + 44;
+    var X = function (v) { return M.l + (v - x0) / (x1 - x0) * iw; };
+    var Xinv = function (px) { return x0 + (px - M.l) / iw * (x1 - x0); };
+    panels.forEach(function (P) {
+      P.Y = function (v) { return P.bottom - (v - P.yd.lo) / (P.yd.hi - P.yd.lo) * P.h; };
+    });
+
+    var showDots = vis.length > 0 && iw / vis.length >= 7;
+    var g = "<defs>";
+    panels.forEach(function (P, k) {
+      g += '<clipPath id="clip' + k + '"><rect x="' + M.l + '" y="' + (P.top - 3) + '" width="' + iw + '" height="' + (P.h + 6) + '"/></clipPath>';
+    });
+    g += "</defs>";
+
+    panels.forEach(function (P, k) {
+      g += '<text class="ptitle" x="0" y="' + P.titleY + '">' + P.title + "</text>";
+      P.ticks.forEach(function (t) {
+        var yy = P.Y(t);
+        g += '<line class="grid" x1="' + M.l + '" x2="' + (W - M.r) + '" y1="' + yy + '" y2="' + yy + '"/>';
+        g += '<text class="tick" x="' + (M.l - 8) + '" y="' + yy + '" text-anchor="end" dominant-baseline="central">' + fmt(t, P.dec) + "</text>";
+      });
+      xTicks.forEach(function (t) {
+        var xx = X(t);
+        g += '<line class="grid" x1="' + xx + '" x2="' + xx + '" y1="' + P.top + '" y2="' + P.bottom + '"/>';
+      });
+      if (P.yd.lo < 0 && P.yd.hi > 0) g += '<line class="zero" x1="' + M.l + '" x2="' + (W - M.r) + '" y1="' + P.Y(0) + '" y2="' + P.Y(0) + '"/>';
+      g += '<line class="axis" x1="' + M.l + '" x2="' + (W - M.r) + '" y1="' + P.bottom + '" y2="' + P.bottom + '"/>';
+      if (s.vf != null && s.vf >= x0 && s.vf <= x1) {
+        var xf = X(s.vf);
+        g += '<line class="ref" x1="' + xf + '" x2="' + xf + '" y1="' + P.top + '" y2="' + P.bottom + '"/>';
+        if (k === 0) {
+          var right = xf > M.l + iw * 0.7;
+          g += '<text class="ref-label" x="' + (xf + (right ? -6 : 6)) + '" y="' + (P.top + 12) + '" text-anchor="' + (right ? "end" : "start") + '">Vf ' + fmt(s.vf, 1) + " V</text>";
+        }
+      }
+      // series
+      var d = "", pen = false;
+      P.idx.forEach(function (j) {
+        var v = P.vals[j];
+        if (!isFinite(v)) { pen = false; return; }
+        d += (pen ? "L" : "M") + X(s.v[j]).toFixed(1) + " " + P.Y(v).toFixed(1);
+        pen = true;
+      });
+      g += '<g clip-path="url(#clip' + k + ')"><path class="line" d="' + d + '"/>';
+      if (showDots) {
+        visOk.forEach(function (j) {
+          var v = P.vals[j];
+          if (isFinite(v) && v >= P.yd.lo && v <= P.yd.hi) g += '<circle class="dot" cx="' + X(s.v[j]) + '" cy="' + P.Y(v) + '" r="3.5"/>';
+        });
+      }
+      g += "</g>";
+      if (k === 0) {
+        vis.forEach(function (j) {
+          if (s.lim[j]) g += '<circle class="limit" cx="' + X(s.v[j]) + '" cy="' + P.Y(s.i[j]) + '" r="4.5"/>';
+        });
+      }
+      if (P.robust) {
+        visOk.forEach(function (j) {
+          var v = P.vals[j], xx = X(s.v[j]);
+          if (v > P.yd.hi) g += '<path class="off" d="M' + (xx - 4) + " " + (P.top + 8) + " L" + (xx + 4) + " " + (P.top + 8) + " L" + xx + " " + (P.top + 1) + ' Z"/>';
+          else if (v < P.yd.lo) g += '<path class="off" d="M' + (xx - 4) + " " + (P.bottom - 8) + " L" + (xx + 4) + " " + (P.bottom - 8) + " L" + xx + " " + (P.bottom - 1) + ' Z"/>';
+        });
+      }
+    });
+
+    // Plasma-potential candidates: + to - zero crossings of d2I/dV2
+    var cr = crossings(s, der.d2).filter(function (v) { return v >= x0 && v <= x1; });
+    var P2 = panels[2];
+    if (P2.yd.lo <= 0 && P2.yd.hi >= 0) {
+      cr.forEach(function (v) { g += '<circle class="cross" cx="' + X(v) + '" cy="' + P2.Y(0) + '" r="4.5"/>'; });
+    }
+
+    xTicks.forEach(function (t) {
+      g += '<text class="tick" x="' + X(t) + '" y="' + (last.bottom + 18) + '" text-anchor="middle">' + fmt(t, xDec) + "</text>";
+    });
+    g += '<text class="axis-title" x="' + (M.l + iw / 2) + '" y="' + (H - 6) + '" text-anchor="middle">Probe voltage, V (V)</text>';
+    g += '<rect class="sel" id="sel" y="' + panels[0].top + '" height="' + (last.bottom - panels[0].top) + '" visibility="hidden"/>';
+    g += '<g id="xh" visibility="hidden"><line class="xh-line" id="xh-line" y1="' + panels[0].top + '" y2="' + last.bottom + '"/>';
+    panels.forEach(function (P, k) { g += '<circle class="xh-dot" id="xh-d' + k + '" r="4"/>'; });
+    g += "</g>";
+
+    svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+    svg.innerHTML = g;
+    svg.setAttribute("aria-label", "I–V characteristic with first and second derivatives, " + vis.length + " readings between " + fmt(x0, 1) + " and " + fmt(x1, 1) + " volts.");
+
+    var visByV = vis.slice().sort(function (a, b) { return s.v[a] - s.v[b]; });
+    G = { W: W, H: H, M: M, iw: iw, X: X, Xinv: Xinv, panels: panels, vis: visByV, x0: x0, x1: x1 };
+
+    var ro = $("readout");
+    if (!cr.length) ro.textContent = "d²I/dV² does not cross zero from + to − in this range.";
+    else {
+      var shown = cr.slice(0, 8).map(function (v) { return fmt(v, 1); }).join(", ");
+      ro.textContent = "d²I/dV² crosses zero from + to − at " + shown + " V" + (cr.length > 8 ? ", and " + (cr.length - 8) + " more" : "") +
+        " (" + cr.length + " in view, " + der.win + "-point window).";
+    }
+  }
+
+  function setCursor(i) {
+    cursor = i;
+    var xh = $("xh");
+    if (i == null || !G) { if (xh) xh.setAttribute("visibility", "hidden"); tip.hidden = true; return; }
+    var s = sweeps[cur], x = G.X(s.v[i]);
+    var line = $("xh-line");
+    line.setAttribute("x1", x); line.setAttribute("x2", x);
+    G.panels.forEach(function (P, k) {
+      var dot = $("xh-d" + k), v = P.vals[i];
+      if (isFinite(v) && v >= P.yd.lo && v <= P.yd.hi && !(k > 0 && s.lim[i])) {
+        dot.setAttribute("cx", x); dot.setAttribute("cy", P.Y(v)); dot.setAttribute("visibility", "visible");
+      } else dot.setAttribute("visibility", "hidden");
+    });
+    xh.setAttribute("visibility", "visible");
+    $("tip-head").textContent = "Reading " + (i + 1) + " of " + s.n + " · t = " + fmt(s.t[i] - s.t[0], 3) + " s";
+    $("tip-v").textContent = fmt(s.v[i], 3) + " V";
+    $("tip-i").textContent = fmt(s.i[i], 4) + " µA";
+    $("tip-d1").textContent = fmtSig(der.d1[i], 4) + " µA/V";
+    $("tip-d2").textContent = fmtSig(der.d2[i], 3) + " µA/V²";
+    $("tip-note").hidden = !s.lim[i];
+    tip.hidden = false;
+    var tw = tip.offsetWidth, th = tip.offsetHeight, P0 = G.panels[0];
+    var ay = Math.max(P0.top, Math.min(P0.bottom, P0.Y(s.i[i])));
+    var left = x + 14; if (left + tw > G.W - 6) left = x - 14 - tw; if (left < 6) left = 6;
+    var top = Math.max(6, Math.min(G.H - th - 6, ay - th / 2));
+    tip.style.left = left + "px"; tip.style.top = top + "px";
+  }
+
+  function pointer(e) {
+    var r = svg.getBoundingClientRect(), k = G.W / r.width;
+    return { x: (e.clientX - r.left) * k, y: (e.clientY - r.top) * k };
+  }
+  function inPlot(px) { return px >= G.M.l - 6 && px <= G.W - G.M.r + 6; }
+  function nearest(px) {
+    var best = null, bd = Infinity, s = sweeps[cur];
+    G.vis.forEach(function (j) { var d = Math.abs(G.X(s.v[j]) - px); if (d < bd) { bd = d; best = j; } });
+    return best;
+  }
+  function hover(e) {
+    var p = pointer(e);
+    if (!inPlot(p.x)) { setCursor(null); return; }
+    setCursor(nearest(p.x));
+  }
+  svg.addEventListener("pointerdown", function (e) {
+    if (!G) return;
+    var p = pointer(e);
+    if (e.pointerType === "mouse" && e.button === 0 && inPlot(p.x)) {
+      drag = { x: p.x };
+      svg.setPointerCapture(e.pointerId);
+    } else hover(e);
+  });
+  svg.addEventListener("pointermove", function (e) {
+    if (!G) return;
+    if (drag) {
+      var p = pointer(e), a = Math.max(G.M.l, Math.min(drag.x, p.x)), b = Math.min(G.M.l + G.iw, Math.max(drag.x, p.x)), sel = $("sel");
+      if (b - a > 4) {
+        sel.setAttribute("x", a); sel.setAttribute("width", b - a); sel.setAttribute("visibility", "visible");
+        setCursor(null);
+        return;
+      }
+    }
+    hover(e);
+  });
+  svg.addEventListener("pointerup", function (e) {
+    if (!drag) return;
+    var p = pointer(e), a = Math.max(G.M.l, Math.min(drag.x, p.x)), b = Math.min(G.M.l + G.iw, Math.max(drag.x, p.x));
+    drag = null;
+    $("sel").setAttribute("visibility", "hidden");
+    if (b - a > 8) { view = [G.Xinv(a), G.Xinv(b)]; refresh(); }
+  });
+  svg.addEventListener("pointercancel", function () { drag = null; if ($("sel")) $("sel").setAttribute("visibility", "hidden"); });
+  svg.addEventListener("pointerleave", function (e) { if (e.pointerType === "mouse" && !drag && document.activeElement !== svg) setCursor(null); });
+  svg.addEventListener("dblclick", function () { view = null; refresh(); });
+  svg.addEventListener("blur", function () { setCursor(null); });
+  svg.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") { setCursor(null); return; }
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight" || !G || !G.vis.length) return;
+    e.preventDefault();
+    var pos = cursor == null ? -1 : G.vis.indexOf(cursor);
+    if (pos < 0) pos = Math.floor(G.vis.length / 2);
+    else pos += (e.key === "ArrowRight" ? 1 : -1) * (e.shiftKey ? 10 : 1);
+    setCursor(G.vis[Math.max(0, Math.min(G.vis.length - 1, pos))]);
+  });
+
+  // Table
+  function buildTable() {
+    var s = sweeps[cur], body = $("tbody"), frag = document.createDocumentFragment();
+    body.textContent = "";
+    for (var i = 0; i < s.n; i++) {
+      var tr = document.createElement("tr");
+      [String(i + 1), fmt(s.v[i], 3), fmt(s.i[i], 4), fmtSig(der.d1[i], 4), fmtSig(der.d2[i], 3), s.lim[i] ? "Source limit" : ""].forEach(function (txt) {
+        var td = document.createElement("td"); td.textContent = txt; tr.appendChild(td);
+      });
+      frag.appendChild(tr);
+    }
+    body.appendChild(frag);
+  }
+  tblBtn.addEventListener("click", function () {
+    var open = tblWrap.hidden;
+    tblWrap.hidden = !open;
+    tblBtn.setAttribute("aria-expanded", String(open));
+    tblBtn.textContent = open ? "Hide table" : "Show table";
+    if (open) buildTable();
+  });
+
+  // Controls
+  function refresh() {
+    der = derivs(sweeps[cur], win);
+    winOut.textContent = win === 3 ? "3 points (none)" : win + " points";
+    var keep = cursor;
+    render();
+    setCursor(keep != null && G.vis.indexOf(keep) >= 0 ? keep : null);
+    if (!tblWrap.hidden) buildTable();
+  }
+  function go(k) {
+    cur = Math.max(0, Math.min(N - 1, k));
+    view = null; cursor = null;
+    pick.value = String(cur);
+    prev.disabled = cur === 0; next.disabled = cur === N - 1;
+    renderHeader();
+    refresh();
+  }
+  function applyRange() {
+    var a = parseFloat(x0In.value), b = parseFloat(x1In.value);
+    if (isFinite(a) && isFinite(b) && b > a) view = [a, b];
+    refresh();
+  }
+  winIn.addEventListener("input", function () { win = Number(winIn.value); refresh(); });
+  x0In.addEventListener("change", applyRange);
+  x1In.addEventListener("change", applyRange);
+  $("reset").addEventListener("click", function () { view = null; refresh(); });
+  pick.addEventListener("change", function () { go(Number(pick.value)); });
+  prev.addEventListener("click", function () { go(cur - 1); });
+  next.addEventListener("click", function () { go(cur + 1); });
+  document.addEventListener("keydown", function (e) {
+    if (N < 2 || e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
+    if (e.target.closest && e.target.closest("select, input, textarea, svg")) return;
+    if (e.key === "ArrowLeft") go(cur - 1);
+    else if (e.key === "ArrowRight") go(cur + 1);
+  });
+
+  if (window.ResizeObserver) {
+    new ResizeObserver(function () {
+      if (Math.abs(wrap.clientWidth - lastW) < 1) return;
+      var keep = cursor; render(); setCursor(keep);
+    }).observe(wrap);
+  }
+
+  go(0);
+})();
+</script>
