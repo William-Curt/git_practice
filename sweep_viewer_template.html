@@ -1,0 +1,458 @@
+<title>Sweep Viewer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one column bench tool. A single control row scopes the stats, chart and table beneath it. */
+:root {
+  --bg: #f3f3f0;
+  --surface: #fcfcfb;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --grid: #e1e0d9;
+  --baseline: #c3c2b7;
+  --hair: rgba(11, 11, 11, 0.10);
+  --line-strong: rgba(11, 11, 11, 0.28);
+  --wash: rgba(11, 11, 11, 0.05);
+  --series: #2a78d6;
+  --font-sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121211;
+    --surface: #1a1a19;
+    --ink: #ffffff;
+    --ink-2: #c3c2b7;
+    --grid: #2c2c2a;
+    --baseline: #383835;
+    --hair: rgba(255, 255, 255, 0.10);
+    --line-strong: rgba(255, 255, 255, 0.28);
+    --wash: rgba(255, 255, 255, 0.06);
+    --series: #3987e5;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121211;
+  --surface: #1a1a19;
+  --ink: #ffffff;
+  --ink-2: #c3c2b7;
+  --grid: #2c2c2a;
+  --baseline: #383835;
+  --hair: rgba(255, 255, 255, 0.10);
+  --line-strong: rgba(255, 255, 255, 0.28);
+  --wash: rgba(255, 255, 255, 0.06);
+  --series: #3987e5;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 14px/1.5 var(--font-sans);
+}
+.app {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding-inline: 16px;
+  padding-block: 24px 40px;
+  display: grid;
+  gap: 16px;
+}
+
+.eyebrow { font: 500 12px/1.4 var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-2); }
+h1 { margin: 4px 0 0; font-size: 24px; line-height: 1.2; font-weight: 600; letter-spacing: -0.01em; text-wrap: balance; }
+.sub { margin: 4px 0 0; color: var(--ink-2); }
+
+/* Controls */
+.controls { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+button, select {
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  height: 36px;
+  padding: 0 12px;
+}
+button { cursor: pointer; white-space: nowrap; }
+button:hover:not(:disabled) { background: var(--wash); }
+button:disabled { opacity: 0.45; cursor: default; }
+select { min-width: 0; width: 100%; text-overflow: ellipsis; font-family: var(--font-mono); font-size: 13px; }
+button:focus-visible, select:focus-visible, input[type="range"]:focus-visible { outline: 2px solid var(--series); outline-offset: 2px; }
+.slide { grid-column: 1 / -1; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; font: 12px var(--font-mono); color: var(--ink-2); }
+input[type="range"] { width: 100%; margin: 0; accent-color: var(--series); }
+
+/* Summary */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px 24px; }
+.stat { min-width: 0; }
+.stat .k { font: 500 12px/1.4 var(--font-mono); letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink-2); }
+.stat .v { font: 500 17px/1.35 var(--font-mono); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.stat .s { font-size: 12px; color: var(--ink-2); }
+
+/* Cards */
+.card { background: var(--surface); border: 1px solid var(--hair); border-radius: 10px; padding: 16px; min-width: 0; }
+.card-head { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+h2 { margin: 0; font-size: 15px; font-weight: 600; }
+h2 .of { color: var(--ink-2); font-weight: 400; }
+.note { font-size: 12px; color: var(--ink-2); }
+
+/* Chart */
+.chart-wrap { position: relative; }
+#chart { display: block; width: 100%; height: auto; touch-action: pan-y; }
+#chart:focus-visible { outline: 2px solid var(--series); outline-offset: 2px; border-radius: 4px; }
+.grid { stroke: var(--grid); stroke-width: 1; }
+.zero, .axis { stroke: var(--baseline); stroke-width: 1; }
+.tick { fill: var(--ink-2); font: 11px var(--font-mono); font-variant-numeric: tabular-nums; }
+.axis-title { fill: var(--ink-2); font: 12px var(--font-sans); }
+.line { fill: none; stroke: var(--series); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.mk-start { fill: var(--surface); stroke: var(--series); stroke-width: 2; }
+.mk-end { fill: var(--series); stroke: var(--surface); stroke-width: 2; }
+.xh-line { stroke: var(--ink-2); stroke-width: 1; }
+.xh-dot { fill: var(--series); stroke: var(--surface); stroke-width: 2; }
+
+.tip {
+  position: absolute;
+  pointer-events: none;
+  min-width: 168px;
+  padding: 8px 10px;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.14);
+  font-size: 12px;
+}
+.tip-row { display: flex; justify-content: space-between; gap: 16px; align-items: baseline; }
+.tip-k { color: var(--ink-2); }
+.tip-v { font: 500 13px var(--font-mono); font-variant-numeric: tabular-nums; color: var(--ink); }
+.keyline { display: inline-block; width: 12px; height: 2px; margin-right: 6px; vertical-align: middle; background: var(--series); border-radius: 1px; }
+.tip-meta { margin-top: 2px; font-family: var(--font-mono); font-size: 11px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.tip-meta:first-of-type { margin-top: 6px; }
+
+.key { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 8px; font-size: 12px; color: var(--ink-2); }
+.key span { display: inline-flex; gap: 6px; align-items: center; }
+.key svg { display: block; }
+
+/* Table */
+.table-wrap { max-height: 320px; overflow: auto; border: 1px solid var(--hair); border-radius: 8px; margin-top: 8px; }
+table { width: 100%; border-collapse: collapse; font: 12px var(--font-mono); font-variant-numeric: tabular-nums; }
+th, td { padding: 6px 12px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--hair); }
+th { position: sticky; top: 0; background: var(--surface); color: var(--ink-2); font-weight: 500; }
+th:nth-child(-n+2), td:nth-child(-n+2) { text-align: left; }
+
+.foot { margin: 0; max-width: 70ch; font-size: 12px; color: var(--ink-2); }
+
+@media (max-width: 520px) {
+  .card { padding: 12px; }
+  .stat .v { font-size: 15px; }
+}
+</style>
+<!--BODY-->
+<div class="app">
+  <header>
+    <div class="eyebrow" id="eyebrow"></div>
+    <h1>Sweep viewer</h1>
+    <p class="sub" id="sub"></p>
+  </header>
+
+  <section class="controls" aria-label="Choose a sweep">
+    <button id="prev" type="button" aria-label="Previous sweep">&lsaquo; Prev</button>
+    <select id="pick" aria-label="Sweep"></select>
+    <button id="next" type="button" aria-label="Next sweep">Next &rsaquo;</button>
+    <div class="slide">
+      <span>1</span>
+      <input id="slider" type="range" min="1" step="1" value="1" aria-label="Sweep number">
+      <span id="max-label"></span>
+    </div>
+  </section>
+
+  <section class="stats" aria-label="Sweep summary">
+    <div class="stat"><div class="k">Time window</div><div class="v" id="st-time"></div><div class="s" id="st-time-s"></div></div>
+    <div class="stat"><div class="k">Voltage, V2</div><div class="v" id="st-volt"></div><div class="s" id="st-volt-s"></div></div>
+    <div class="stat"><div class="k">Current, I2</div><div class="v" id="st-cur"></div><div class="s" id="st-cur-s"></div></div>
+    <div class="stat"><div class="k">Readings</div><div class="v" id="st-n"></div><div class="s" id="st-n-s"></div></div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <h2><span id="chart-title"></span> <span class="of" id="chart-of"></span></h2>
+      <span class="note">Axes fit to this sweep.</span>
+    </div>
+    <div class="chart-wrap" id="wrap">
+      <svg id="chart" tabindex="0" role="group"></svg>
+      <div class="tip" id="tip" hidden>
+        <div class="tip-row"><span class="tip-k">V2</span><span class="tip-v" id="tip-v"></span></div>
+        <div class="tip-row"><span class="tip-k"><i class="keyline"></i>I2</span><span class="tip-v" id="tip-i"></span></div>
+        <div class="tip-meta" id="tip-meta"></div>
+        <div class="tip-meta" id="tip-idx"></div>
+      </div>
+    </div>
+    <div class="key">
+      <span><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="4.5" style="fill:var(--surface);stroke:var(--series);stroke-width:2"/></svg>First reading</span>
+      <span><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="5" style="fill:var(--series)"/></svg>Last reading</span>
+      <span>Hover or drag across the chart to read values.</span>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <h2>Readings</h2>
+      <button id="tbl-toggle" type="button" aria-expanded="false" aria-controls="tbl-wrap">Show table</button>
+    </div>
+    <div class="table-wrap" id="tbl-wrap" hidden>
+      <table>
+        <thead><tr><th scope="col">#</th><th scope="col">Clock time</th><th scope="col">DAC</th><th scope="col">V2 (V)</th><th scope="col">I2 (&micro;A)</th></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <p class="foot">The log has no units. V2 is read as volts and I2 as amps, shown here in &micro;A. A sweep is one ramp of the DAC between its turning points (0 and 65,535); the log starts and ends mid-ramp, so the first and last sweeps are partial. Left and right arrow keys step through the sweeps.</p>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var D = __SWEEP_DATA__;
+  var sweeps = D.sweeps, N = sweeps.length;
+  var T0 = Date.parse(D.t0 + "Z"); // timestamps are naive; read back with UTC getters so clock time matches the CSV
+  var MINUS = "−";
+  var $ = function (id) { return document.getElementById(id); };
+  var pad = function (n, w) { return String(n).padStart(w || 2, "0"); };
+
+  function fmt(x, d) {
+    var s = x.toFixed(d);
+    if (Number(s) === 0) s = (0).toFixed(d);
+    return s.replace("-", MINUS);
+  }
+  function fmtInt(n) { return n.toLocaleString("en-US"); }
+  function clock(ms) {
+    var d = new Date(T0 + ms);
+    return pad(d.getUTCHours()) + ":" + pad(d.getUTCMinutes()) + ":" + pad(d.getUTCSeconds()) + "." + pad(d.getUTCMilliseconds(), 3);
+  }
+  function mmss(ms) { var s = Math.floor(ms / 1000); return Math.floor(s / 60) + ":" + pad(s % 60); }
+  function minutes(ms) { return (ms / 60000).toFixed(2); }
+  function fmtV(x) { return fmt(x, Math.abs(x) >= 9.95 ? 0 : 1); }
+
+  // Per-sweep summary values
+  sweeps.forEach(function (s) {
+    s.n = s.v.length;
+    s.vmin = Math.min.apply(null, s.v); s.vmax = Math.max.apply(null, s.v);
+    s.imin = Math.min.apply(null, s.i); s.imax = Math.max.apply(null, s.i);
+    s.imaxAt = s.i.indexOf(s.imax);
+    s.neg = s.imin < 0;
+    s.rising = s.v[s.n - 1] > s.v[0];
+  });
+
+  var pick = $("pick"), slider = $("slider"), prev = $("prev"), next = $("next");
+  var svg = $("chart"), wrap = $("wrap"), tip = $("tip");
+  var cur = N > 1 ? 1 : 0, cursor = null, geom = null, lastW = 0;
+
+  // Header
+  var tStart = new Date(T0), tEnd = new Date(T0 + sweeps[N - 1].t[sweeps[N - 1].n - 1]);
+  var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  $("eyebrow").textContent = "Sweep log · " + tStart.getUTCDate() + " " + MONTHS[tStart.getUTCMonth()] + " " + tStart.getUTCFullYear() +
+    " · " + pad(tStart.getUTCHours()) + ":" + pad(tStart.getUTCMinutes()) + "–" + pad(tEnd.getUTCHours()) + ":" + pad(tEnd.getUTCMinutes());
+  $("sub").textContent = "Current against voltage, one sweep at a time. " + N + " sweeps, " + fmtInt(D.rows) + " readings.";
+
+  // Controls
+  sweeps.forEach(function (s, k) {
+    var o = document.createElement("option");
+    o.value = String(k);
+    var t = "Sweep " + (k + 1) + " · at " + mmss(s.t[0]) + " · V2 " + fmtV(s.v[0]) + " → " + fmtV(s.v[s.n - 1]) + " V";
+    if (s.partial) t += " · partial";
+    if (s.neg) t += " · dips below 0";
+    o.textContent = t;
+    pick.appendChild(o);
+  });
+  slider.max = String(N);
+  $("max-label").textContent = String(N);
+
+  // Scales
+  function niceStep(span, target) {
+    var raw = span / target, p = Math.pow(10, Math.floor(Math.log10(raw))), e = raw / p;
+    return p * (e < 1.5 ? 1 : e < 3.5 ? 2 : e < 7.5 ? 5 : 10);
+  }
+  function niceDomain(lo, hi, target, padFrac) {
+    var lo0 = lo, hi0 = hi, span = hi - lo;
+    if (span <= 0) { var p = Math.abs(hi) * 0.05 || 0.5; lo -= p; hi += p; span = hi - lo; }
+    lo -= span * padFrac; hi += span * padFrac;
+    if (lo0 >= 0 && lo < 0) lo = 0;
+    if (hi0 <= 0 && hi > 0) hi = 0;
+    var step = niceStep(hi - lo, target);
+    var a = Math.floor(lo / step + 1e-9), b = Math.ceil(hi / step - 1e-9), ticks = [];
+    for (var k = a; k <= b; k++) ticks.push(k * step);
+    return { lo: a * step, hi: b * step, ticks: ticks, dec: Math.max(0, -Math.floor(Math.log10(step) + 1e-9)) };
+  }
+
+  function draw() {
+    var s = sweeps[cur], n = s.n;
+    var W = Math.max(260, Math.floor(wrap.clientWidth)); lastW = wrap.clientWidth;
+    var H = Math.round(Math.min(440, Math.max(280, W * 0.5)));
+    var small = W < 520;
+    var xd = niceDomain(s.vmin, s.vmax, small ? 5 : 8, 0);
+    var yd = niceDomain(s.imin, s.imax, small ? 5 : 7, 0.05);
+    var maxLen = 0;
+    yd.ticks.forEach(function (t) { maxLen = Math.max(maxLen, fmt(t, yd.dec).length); });
+    var M = { t: 12, r: small ? 12 : 20, b: 48, l: Math.ceil(maxLen * 6.7) + 34 };
+    var iw = W - M.l - M.r, ih = H - M.t - M.b;
+    var X = function (v) { return M.l + (v - xd.lo) / (xd.hi - xd.lo) * iw; };
+    var Y = function (i) { return M.t + ih - (i - yd.lo) / (yd.hi - yd.lo) * ih; };
+
+    var px = new Float32Array(n), py = new Float32Array(n), d = "";
+    for (var i = 0; i < n; i++) {
+      px[i] = X(s.v[i]); py[i] = Y(s.i[i]);
+      d += (i ? "L" : "M") + px[i].toFixed(1) + " " + py[i].toFixed(1);
+    }
+
+    var g = "";
+    yd.ticks.forEach(function (t) {
+      var yy = Y(t);
+      g += '<line class="grid" x1="' + M.l + '" x2="' + (W - M.r) + '" y1="' + yy + '" y2="' + yy + '"/>';
+      g += '<text class="tick" x="' + (M.l - 8) + '" y="' + yy + '" text-anchor="end" dominant-baseline="central">' + fmt(t, yd.dec) + "</text>";
+    });
+    xd.ticks.forEach(function (t) {
+      var xx = X(t);
+      g += '<line class="grid" x1="' + xx + '" x2="' + xx + '" y1="' + M.t + '" y2="' + (M.t + ih) + '"/>';
+      g += '<text class="tick" x="' + xx + '" y="' + (M.t + ih + 18) + '" text-anchor="middle">' + fmt(t, xd.dec) + "</text>";
+    });
+    if (yd.lo < 0 && yd.hi > 0) g += '<line class="zero" x1="' + M.l + '" x2="' + (W - M.r) + '" y1="' + Y(0) + '" y2="' + Y(0) + '"/>';
+    g += '<line class="axis" x1="' + M.l + '" x2="' + (W - M.r) + '" y1="' + (M.t + ih) + '" y2="' + (M.t + ih) + '"/>';
+    g += '<text class="axis-title" x="' + (M.l + iw / 2) + '" y="' + (H - 6) + '" text-anchor="middle">Voltage, V2 (V)</text>';
+    g += '<text class="axis-title" transform="translate(12 ' + (M.t + ih / 2) + ') rotate(-90)" text-anchor="middle">Current, I2 (µA)</text>';
+    g += '<path class="line" d="' + d + '"/>';
+    g += '<circle class="mk-start" cx="' + px[0] + '" cy="' + py[0] + '" r="5"/>';
+    g += '<circle class="mk-end" cx="' + px[n - 1] + '" cy="' + py[n - 1] + '" r="5"/>';
+    g += '<g id="xh" visibility="hidden"><line class="xh-line" id="xh-line"/><circle class="xh-dot" id="xh-dot" r="4"/></g>';
+
+    svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+    svg.innerHTML = g;
+    svg.setAttribute("aria-label", "Sweep " + (cur + 1) + ": I2 against V2, " + fmtInt(n) + " readings, V2 from " + fmtV(s.v[0]) + " to " + fmtV(s.v[n - 1]) +
+      " volts, I2 from " + fmt(s.imin, 3) + " to " + fmt(s.imax, 3) + " microamps.");
+    geom = { W: W, H: H, M: M, ih: ih, px: px, py: py, n: n };
+  }
+
+  function setCursor(i) {
+    cursor = i;
+    var xh = $("xh");
+    if (i == null || !geom) { if (xh) xh.setAttribute("visibility", "hidden"); tip.hidden = true; return; }
+    var s = sweeps[cur], G = geom, x = G.px[i], y = G.py[i];
+    var line = $("xh-line"), dot = $("xh-dot");
+    line.setAttribute("x1", x); line.setAttribute("x2", x); line.setAttribute("y1", G.M.t); line.setAttribute("y2", G.M.t + G.ih);
+    dot.setAttribute("cx", x); dot.setAttribute("cy", y);
+    xh.setAttribute("visibility", "visible");
+    $("tip-v").textContent = fmt(s.v[i], 3) + " V";
+    $("tip-i").textContent = fmt(s.i[i], 4) + " µA";
+    $("tip-meta").textContent = clock(s.t[i]) + " · DAC " + fmtInt(s.dac[i]);
+    $("tip-idx").textContent = "Reading " + fmtInt(i + 1) + " of " + fmtInt(s.n);
+    tip.hidden = false;
+    var tw = tip.offsetWidth, th = tip.offsetHeight;
+    var left = x + 14; if (left + tw > G.W - 6) left = x - 14 - tw; if (left < 6) left = 6;
+    var top = y - th - 12; if (top < 6) top = y + 14; if (top + th > G.H - 6) top = G.H - 6 - th;
+    tip.style.left = left + "px"; tip.style.top = top + "px";
+  }
+
+  function nearest(mx, my) {
+    var G = geom, best = 0, bestScore = Infinity;
+    for (var i = 0; i < G.n; i++) {
+      var score = Math.abs(G.px[i] - mx) + 0.001 * Math.abs(G.py[i] - my);
+      if (score < bestScore) { bestScore = score; best = i; }
+    }
+    return best;
+  }
+
+  function onPointer(e) {
+    if (!geom) return;
+    var r = svg.getBoundingClientRect(), sx = geom.W / r.width;
+    var mx = (e.clientX - r.left) * sx, my = (e.clientY - r.top) * sx;
+    if (mx < geom.M.l - 6 || mx > geom.W - geom.M.r + 6) { setCursor(null); return; }
+    setCursor(nearest(mx, my));
+  }
+  svg.addEventListener("pointermove", onPointer);
+  svg.addEventListener("pointerdown", onPointer);
+  svg.addEventListener("pointerleave", function (e) { if (e.pointerType === "mouse" && document.activeElement !== svg) setCursor(null); });
+  svg.addEventListener("blur", function () { setCursor(null); });
+  svg.addEventListener("keydown", function (e) {
+    var s = sweeps[cur];
+    if (e.key === "Escape") { setCursor(null); return; }
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    e.preventDefault();
+    var screenDir = e.key === "ArrowRight" ? 1 : -1;      // screen direction along V2
+    var idxDir = screenDir * (s.rising ? 1 : -1);          // sweep may run low-to-high or high-to-low
+    var at = cursor == null ? Math.floor(s.n / 2) : cursor + idxDir * (e.shiftKey ? 25 : 1);
+    setCursor(Math.max(0, Math.min(s.n - 1, at)));
+  });
+
+  // Summary + table
+  function renderStats() {
+    var s = sweeps[cur];
+    $("chart-title").textContent = "Sweep " + (cur + 1);
+    $("chart-of").textContent = "of " + N + " · I2 against V2";
+    $("st-time").textContent = minutes(s.t[0]) + " to " + minutes(s.t[s.n - 1]) + " min";
+    $("st-time-s").textContent = "Clock " + clock(s.t[0]).slice(0, 8) + " to " + clock(s.t[s.n - 1]).slice(0, 8);
+    $("st-volt").textContent = fmt(s.v[0], 2) + " → " + fmt(s.v[s.n - 1], 2) + " V";
+    $("st-volt-s").textContent = s.rising ? "Rising" : "Falling";
+    $("st-cur").textContent = fmt(s.imin, 3) + " to " + fmt(s.imax, 3) + " µA";
+    $("st-cur-s").textContent = "Peak at V2 = " + fmt(s.v[s.imaxAt], 2) + " V" + (s.neg ? " · dips below 0" : "");
+    $("st-n").textContent = fmtInt(s.n);
+    $("st-n-s").textContent = s.partial ? "Partial ramp" : "Full ramp";
+  }
+
+  var tblWrap = $("tbl-wrap"), tblBtn = $("tbl-toggle");
+  function buildTable() {
+    var s = sweeps[cur], body = $("tbody"), frag = document.createDocumentFragment();
+    body.textContent = "";
+    for (var i = 0; i < s.n; i++) {
+      var tr = document.createElement("tr");
+      [String(i + 1), clock(s.t[i]), fmtInt(s.dac[i]), fmt(s.v[i], 4), fmt(s.i[i], 5)].forEach(function (txt) {
+        var td = document.createElement("td"); td.textContent = txt; tr.appendChild(td);
+      });
+      frag.appendChild(tr);
+    }
+    body.appendChild(frag);
+    tblWrap.scrollTop = 0;
+  }
+  tblBtn.addEventListener("click", function () {
+    var open = tblWrap.hidden;
+    tblWrap.hidden = !open;
+    tblBtn.setAttribute("aria-expanded", String(open));
+    tblBtn.textContent = open ? "Hide table" : "Show table";
+    if (open) buildTable();
+  });
+
+  // Selection
+  function go(k) {
+    k = Math.max(0, Math.min(N - 1, k));
+    cur = k; cursor = null;
+    pick.value = String(k); slider.value = String(k + 1);
+    prev.disabled = k === 0; next.disabled = k === N - 1;
+    renderStats(); draw(); setCursor(null);
+    if (!tblWrap.hidden) buildTable();
+  }
+  pick.addEventListener("change", function () { go(Number(pick.value)); });
+  slider.addEventListener("input", function () { go(Number(slider.value) - 1); });
+  prev.addEventListener("click", function () { go(cur - 1); });
+  next.addEventListener("click", function () { go(cur + 1); });
+  document.addEventListener("keydown", function (e) {
+    if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
+    if (e.target.closest && e.target.closest("select, input, textarea, svg")) return;
+    if (e.key === "ArrowLeft") go(cur - 1);
+    else if (e.key === "ArrowRight") go(cur + 1);
+    else if (e.key === "Home") go(0);
+    else if (e.key === "End") go(N - 1);
+  });
+
+  if (window.ResizeObserver) {
+    new ResizeObserver(function () {
+      if (Math.abs(wrap.clientWidth - lastW) < 1) return;
+      var keep = cursor; draw(); setCursor(keep);
+    }).observe(wrap);
+  }
+
+  go(cur);
+})();
+</script>
